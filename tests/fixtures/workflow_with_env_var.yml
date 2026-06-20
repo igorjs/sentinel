@@ -1,0 +1,14 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  LIBKRUN_BOTTLE_VERSION: "0.18.1"
+  OTHER_VAR: "untouched"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
