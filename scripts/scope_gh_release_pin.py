@@ -1,4 +1,5 @@
 """gh-release-pin scope: bump a structured pin when upstream ships a new release."""
+
 from __future__ import annotations
 
 import re
@@ -18,13 +19,16 @@ SCOPE = "gh-release-pin"
 def _gh_latest(repo: str) -> str:
     out = subprocess.run(
         ["gh", "api", f"repos/{repo}/releases/latest", "--jq", ".tag_name"],
-        capture_output=True, check=True, text=True,
+        capture_output=True,
+        check=True,
+        text=True,
     ).stdout.strip()
     return out
 
 
 def detect(
-    workdir: Path, custom: CustomScope,
+    workdir: Path,
+    custom: CustomScope,
     *,
     latest_resolver: Callable[[str], str] = _gh_latest,
 ) -> list[Drift]:
@@ -45,12 +49,16 @@ def detect(
         return []
     if not _semver_gt(latest, current):
         return []
-    return [Drift(
-        scope=SCOPE, key=latest,
-        summary=f"{custom.name}: bump to {latest}",
-        fixed_versions=[latest], current=current,
-        raw={"custom": custom, "target_file": str(target_file)},
-    )]
+    return [
+        Drift(
+            scope=SCOPE,
+            key=latest,
+            summary=f"{custom.name}: bump to {latest}",
+            fixed_versions=[latest],
+            current=current,
+            raw={"custom": custom, "target_file": str(target_file)},
+        )
+    ]
 
 
 def plan(workdir: Path, drift: Drift, custom: CustomScope) -> Plan:
@@ -62,6 +70,7 @@ def plan(workdir: Path, drift: Drift, custom: CustomScope) -> Plan:
 
     def edit_target() -> None:
         write_value(target_file, env_var, new_value, env_path=env_path)
+
     edit_target.__name__ = f"edit_{target_file.name}"
 
     body = (
@@ -72,18 +81,18 @@ def plan(workdir: Path, drift: Drift, custom: CustomScope) -> Plan:
         f"(https://github.com/igorjs/sentinel).\n"
     )
     return Plan(
-        scope=SCOPE, key=drift.key,
+        scope=SCOPE,
+        key=drift.key,
         branch=f"sentinel/gh-release-pin/{custom.name}-{new_value}",
         title=f"{custom.name}: bump to {new_value}",
         body=body,
         files_changed=[str(target_file.relative_to(workdir))],
-        commands=[], post_steps=(edit_target,),
+        commands=[],
+        post_steps=(edit_target,),
     )
 
 
-def run(
-    workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool
-) -> list[Result]:
+def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     results: list[Result] = []
     base_sha = capture_base_sha(workdir) if not dry_run else ""
     for custom in config.custom:
@@ -91,9 +100,14 @@ def run(
             continue
         for drift in detect(workdir, custom):
             p = plan(workdir, drift, custom)
-            results.append(apply_plan(
-                p, dry_run=dry_run, workdir=workdir, base_sha=base_sha,
-            ))
+            results.append(
+                apply_plan(
+                    p,
+                    dry_run=dry_run,
+                    workdir=workdir,
+                    base_sha=base_sha,
+                )
+            )
     return results
 
 

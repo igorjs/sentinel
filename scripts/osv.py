@@ -1,4 +1,5 @@
 """Wrapper around `osv-scanner` with in-process cache."""
+
 from __future__ import annotations
 
 import json
@@ -16,14 +17,10 @@ class OsvCache:
         cmd = ["osv-scanner", "--format", "json", "--recursive", str(workdir)]
         result = subprocess.run(cmd, capture_output=True, check=False, text=True)
         if result.returncode not in (0, 1):
-            raise RuntimeError(
-                f"osv-scanner failed (exit {result.returncode}): {result.stderr}"
-            )
+            raise RuntimeError(f"osv-scanner failed (exit {result.returncode}): {result.stderr}")
         return cls(json.loads(result.stdout or '{"results": []}'))
 
-    def advisories(
-        self, ecosystem: str, package: str | None = None
-    ) -> list[dict[str, Any]]:
+    def advisories(self, ecosystem: str, package: str | None = None) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for r in self._data.get("results", []):
             for p in r.get("packages", []):

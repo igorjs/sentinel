@@ -9,9 +9,7 @@ from scripts.scope_rust import detect, plan
 
 @pytest.fixture
 def workdir(tmp_path: Path, fixtures_dir: Path) -> Path:
-    (tmp_path / "Cargo.lock").write_text(
-        (fixtures_dir / "cargo_lock_with_tokio.lock").read_text()
-    )
+    (tmp_path / "Cargo.lock").write_text((fixtures_dir / "cargo_lock_with_tokio.lock").read_text())
     return tmp_path
 
 
@@ -45,9 +43,7 @@ def test_plan_cleans_osv_scanner_toml(workdir: Path, fixtures_dir: Path):
 
 
 def test_plan_cleans_deny_toml(workdir: Path, fixtures_dir: Path):
-    (workdir / "deny.toml").write_text(
-        (fixtures_dir / "deny_with_tokio.toml").read_text()
-    )
+    (workdir / "deny.toml").write_text((fixtures_dir / "deny_with_tokio.toml").read_text())
     osv = from_fixture(fixtures_dir / "osv_cargo_fixable.json")
     drift = detect(workdir, osv)[0]
     p = plan(workdir, drift)

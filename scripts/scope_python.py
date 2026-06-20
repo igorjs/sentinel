@@ -1,5 +1,6 @@
 """python scope: bump PyPI deps when OSV reports a fixable advisory.
 Detects lockfile to pick poetry/uv/pipenv. No lockfile → issue fallback."""
+
 from __future__ import annotations
 
 import re
@@ -37,8 +38,7 @@ def detect_pkg_manager(workdir: Path) -> str | None:
 
 
 def _has_python_project(workdir: Path) -> bool:
-    return (workdir / "pyproject.toml").exists() or (
-        workdir / "requirements.txt").exists()
+    return (workdir / "pyproject.toml").exists() or (workdir / "requirements.txt").exists()
 
 
 def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
@@ -55,20 +55,27 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
             if key in seen:
                 continue
             seen.add(key)
-            fixed = sorted({
-                e["fixed"]
-                for r in affected.get("ranges", [])
-                for e in r.get("events", [])
-                if "fixed" in e
-            }, key=_parse)
+            fixed = sorted(
+                {
+                    e["fixed"]
+                    for r in affected.get("ranges", [])
+                    for e in r.get("events", [])
+                    if "fixed" in e
+                },
+                key=_parse,
+            )
             if not fixed:
                 continue
-            drifts.append(Drift(
-                scope=SCOPE, key=adv["id"],
-                summary=adv.get("summary", adv["id"]),
-                fixed_versions=fixed, current="",
-                raw={"module": module, "advisory": adv},
-            ))
+            drifts.append(
+                Drift(
+                    scope=SCOPE,
+                    key=adv["id"],
+                    summary=adv.get("summary", adv["id"]),
+                    fixed_versions=fixed,
+                    current="",
+                    raw={"module": module, "advisory": adv},
+                )
+            )
     return drifts
 
 
@@ -94,20 +101,23 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str) -> Plan:
         edit_pyproject.__name__ = "edit_pyproject_dep"
 
         return Plan(
-            scope=SCOPE, key=drift.key,
+            scope=SCOPE,
+            key=drift.key,
             branch=f"sentinel/python/{drift.key.lower()}",
-            title=title, body=body,
+            title=title,
+            body=body,
             files_changed=["pyproject.toml"],
             commands=[],
             post_steps=(edit_pyproject,),
         )
 
-    lockfiles = {"poetry": "poetry.lock", "uv": "uv.lock",
-                 "pipenv": "Pipfile.lock"}
+    lockfiles = {"poetry": "poetry.lock", "uv": "uv.lock", "pipenv": "Pipfile.lock"}
     return Plan(
-        scope=SCOPE, key=drift.key,
+        scope=SCOPE,
+        key=drift.key,
         branch=f"sentinel/python/{drift.key.lower()}",
-        title=title, body=body,
+        title=title,
+        body=body,
         files_changed=["pyproject.toml", lockfiles[pkg_manager]],
         commands=[_BUMP_CMD[pkg_manager](module)],
     )
@@ -135,9 +145,7 @@ def _edit_pyproject_pep621(path: Path, module: str, new_version: str) -> None:
     raise KeyError(f"{module} not found in [project.dependencies] of {path}")
 
 
-def run(
-    workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool
-) -> list[Result]:
+def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     if not _has_python_project(workdir):
         return []
     pm = detect_pkg_manager(workdir)
@@ -145,33 +153,46 @@ def run(
         any_fixable = detect(workdir, osv)
         if not any_fixable:
             return []
-        return [open_issue_fallback(
-            scope=SCOPE, key="no-lockfile",
-            title="sentinel: python no lockfile detected",
-            body=(
-                "pyproject.toml or requirements.txt present but no lockfile "
-                "(poetry.lock / uv.lock / Pipfile.lock) found. Sentinel cannot "
-                "safely auto-bump pip deps without a lockfile.\n\n"
-                f"{len(any_fixable)} fixable advisor(ies) detected. "
-                "Adopt one of poetry/uv/pipenv to enable auto-bumping."
-            ),
-            dry_run=dry_run, workdir=workdir,
-        )]
+        return [
+            open_issue_fallback(
+                scope=SCOPE,
+                key="no-lockfile",
+                title="sentinel: python no lockfile detected",
+                body=(
+                    "pyproject.toml or requirements.txt present but no lockfile "
+                    "(poetry.lock / uv.lock / Pipfile.lock) found. Sentinel cannot "
+                    "safely auto-bump pip deps without a lockfile.\n\n"
+                    f"{len(any_fixable)} fixable advisor(ies) detected. "
+                    "Adopt one of poetry/uv/pipenv to enable auto-bumping."
+                ),
+                dry_run=dry_run,
+                workdir=workdir,
+            )
+        ]
     results: list[Result] = []
     base_sha = capture_base_sha(workdir) if not dry_run else ""
     for drift in detect(workdir, osv):
         p = plan(workdir, drift, pm)
         try:
-            results.append(apply_plan(
-                p, dry_run=dry_run, workdir=workdir, base_sha=base_sha,
-            ))
+            results.append(
+                apply_plan(
+                    p,
+                    dry_run=dry_run,
+                    workdir=workdir,
+                    base_sha=base_sha,
+                )
+            )
         except (subprocess.CalledProcessError, KeyError) as e:
-            results.append(open_issue_fallback(
-                scope=SCOPE, key=drift.key,
-                title=f"sentinel: python bump blocked for {drift.key}",
-                body=f"Bump failed: {e}. Manual review needed.",
-                dry_run=dry_run, workdir=workdir,
-            ))
+            results.append(
+                open_issue_fallback(
+                    scope=SCOPE,
+                    key=drift.key,
+                    title=f"sentinel: python bump blocked for {drift.key}",
+                    body=f"Bump failed: {e}. Manual review needed.",
+                    dry_run=dry_run,
+                    workdir=workdir,
+                )
+            )
     return results
 
 
