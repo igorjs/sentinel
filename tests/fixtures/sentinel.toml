@@ -1,0 +1,20 @@
+[scopes.go]
+gomod_path = "sdks/go/go.mod"
+update_runtime = true
+
+[scopes.python]
+update_runtime = false
+
+[scopes.javascript]
+enabled = false
+
+[[custom]]
+name = "libkrun-bottle"
+kind = "gh-release-pin"
+upstream_repo = "igorjs/libkrun-builds"
+target_file = ".github/workflows/release.yml"
+target_kind = "yaml-env-var"
+env_var = "LIBKRUN_BOTTLE_VERSION"
+
+[defaults]
+pr_labels = ["dependencies", "automated"]
