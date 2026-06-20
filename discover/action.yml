@@ -1,0 +1,28 @@
+name: sentinel-discover
+description: >
+  Auto-detect enabled sentinel scopes for a repo. Outputs a JSON array.
+inputs:
+  config_path:
+    description: "Path to sentinel.toml relative to workspace"
+    required: false
+    default: ".github/sentinel.toml"
+outputs:
+  scopes:
+    description: "JSON array of enabled scope names"
+    value: ${{ steps.run.outputs.scopes }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - id: run
+      shell: bash
+      run: |
+        SCOPES=$(python ${{ github.action_path }}/../scripts/sentinel.py \
+          --mode discover \
+          --config "${{ inputs.config_path }}" \
+          --workdir "${{ github.workspace }}")
+        echo "scopes=$SCOPES" >> "$GITHUB_OUTPUT"

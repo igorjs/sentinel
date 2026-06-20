@@ -1,0 +1,54 @@
+name: sentinel
+description: >
+  Open auto-PRs for OSV-driven dependency bumps. Runs one scope at a time;
+  may produce multiple PRs per invocation (one per detected drift).
+inputs:
+  scope:
+    description: "Scope name (rust / go / javascript / python / <custom name>)"
+    required: true
+  config_path:
+    description: "Path to sentinel.toml relative to workspace"
+    required: false
+    default: ".github/sentinel.toml"
+  dry_run:
+    description: "Detect + print plan but don't open PRs"
+    required: false
+    default: "false"
+  github_token:
+    description: "Token used to call gh API, push branches, and open PRs"
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - shell: bash
+      run: pip install --quiet ruamel.yaml tomlkit
+
+    - shell: bash
+      run: |
+        curl -fsSL "https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_amd64" \
+          -o /usr/local/bin/osv-scanner
+        chmod +x /usr/local/bin/osv-scanner
+
+    - shell: bash
+      run: |
+        git -C "${{ github.workspace }}" config user.name "sentinel-bot"
+        git -C "${{ github.workspace }}" config user.email "sentinel@users.noreply.github.com"
+
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        FLAGS=""
+        if [[ "${{ inputs.dry_run }}" == "true" ]]; then FLAGS="--dry-run"; fi
+        python ${{ github.action_path }}/scripts/sentinel.py \
+          --mode run \
+          --scope "${{ inputs.scope }}" \
+          --config "${{ inputs.config_path }}" \
+          --workdir "${{ github.workspace }}" \
+          $FLAGS
