@@ -1,0 +1,27 @@
+{
+  "results": [
+    {
+      "source": {"path": "Cargo.lock", "type": "lockfile"},
+      "packages": [
+        {
+          "package": {"name": "tokio", "version": "1.30.0", "ecosystem": "crates.io"},
+          "vulnerabilities": [
+            {
+              "id": "RUSTSEC-2024-9999",
+              "summary": "Test vuln",
+              "affected": [
+                {
+                  "package": {"name": "tokio", "ecosystem": "crates.io"},
+                  "ranges": [
+                    {"type": "SEMVER",
+                     "events": [{"introduced": "0"}, {"fixed": "1.32.0"}]}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
