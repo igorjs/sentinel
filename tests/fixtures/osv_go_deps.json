@@ -1,0 +1,16 @@
+{
+  "results": [{
+    "source": {"path": "go.mod", "type": "lockfile"},
+    "packages": [{
+      "package": {"name": "google.golang.org/grpc", "version": "1.79.3", "ecosystem": "Go"},
+      "vulnerabilities": [{
+        "id": "GHSA-9999-test", "summary": "grpc advisory",
+        "affected": [{
+          "package": {"name": "google.golang.org/grpc", "ecosystem": "Go"},
+          "ranges": [{"type": "SEMVER",
+                      "events": [{"introduced": "0"}, {"fixed": "1.80.0"}]}]
+        }]
+      }]
+    }]
+  }]
+}

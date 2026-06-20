@@ -1,0 +1,18 @@
+{
+  "results": [{
+    "source": {"path": "go.mod", "type": "lockfile"},
+    "packages": [{
+      "package": {"name": "stdlib", "version": "1.24.4", "ecosystem": "Go"},
+      "vulnerabilities": [
+        {"id": "GO-2026-9001", "summary": "stdlib advisory 1",
+         "affected": [{"package": {"name": "stdlib", "ecosystem": "Go"},
+                       "ranges": [{"type": "SEMVER",
+                                   "events": [{"introduced": "0"}, {"fixed": "1.25.8"}]}]}]},
+        {"id": "GO-2026-9002", "summary": "stdlib advisory 2",
+         "affected": [{"package": {"name": "stdlib", "ecosystem": "Go"},
+                       "ranges": [{"type": "SEMVER",
+                                   "events": [{"introduced": "0"}, {"fixed": "1.25.11"}]}]}]}
+      ]
+    }]
+  }]
+}
