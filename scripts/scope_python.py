@@ -165,11 +165,11 @@ def run(
             results.append(apply_plan(
                 p, dry_run=dry_run, workdir=workdir, base_sha=base_sha,
             ))
-        except subprocess.CalledProcessError as e:
+        except (subprocess.CalledProcessError, KeyError) as e:
             results.append(open_issue_fallback(
                 scope=SCOPE, key=drift.key,
                 title=f"sentinel: python bump blocked for {drift.key}",
-                body=f"`{pm}` failed (exit {e.returncode}). Manual review needed.",
+                body=f"Bump failed: {e}. Manual review needed.",
                 dry_run=dry_run, workdir=workdir,
             ))
     return results

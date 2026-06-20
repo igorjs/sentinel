@@ -81,8 +81,8 @@ No config file needed for a default repo layout.
 |---|---|---|---|
 | `rust` | `Cargo.lock` | Cargo deps via `cargo update --precise` + self-cleans `osv-scanner.toml` / `deny.toml` | N/A |
 | `go` | `go.mod` (any path) | Module deps via `go get` + `go mod tidy`. Optionally bumps `go <version>` runtime directive for stdlib advisories. | Default ON; `[scopes.go] update_runtime = false` to opt out |
-| `javascript` | `package.json` | npm deps via npm/pnpm/yarn (auto-detected from lockfile) | Default ON; `[scopes.javascript] update_runtime = false` to opt out |
-| `python` | `pyproject.toml` / `requirements.txt` / lockfile | PyPI deps via poetry/uv/pipenv (auto-detected from lockfile) | Default ON; `[scopes.python] update_runtime = false` to opt out |
+| `javascript` | `package.json` | npm deps via npm/pnpm/yarn (auto-detected from lockfile) | N/A (deferred to v0.2) |
+| `python` | `pyproject.toml` / `requirements.txt` / lockfile | PyPI deps via poetry/uv/pipenv (auto-detected from lockfile) | N/A (deferred to v0.2) |
 
 Lockfile-less repos surface a "no lockfile" issue rather than risk a broken bump.
 
