@@ -2,8 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from scripts.config import Config
 from scripts.osv import from_fixture
-from scripts.scope_python import detect, detect_pkg_manager, plan
+from scripts.scope_python import detect, detect_pkg_manager, plan, run
 
 
 @pytest.fixture
@@ -86,3 +87,33 @@ def test_plan_pyproject_edits_in_place(tmp_path: Path, fixtures_dir: Path):
     assert "requests==2.28.0" not in text
     # untouched dep preserved
     assert 'click>=8.0' in text
+
+
+def test_run_pyproject_missing_dependencies_key_returns_issue(
+    tmp_path: Path, fixtures_dir: Path
+):
+    """run() must not crash when pyproject.toml has no [project.dependencies].
+
+    _edit_pyproject_pep621() raises KeyError in that case; the except clause
+    in run() must catch it and fall back to an issue Result.
+    """
+    from unittest.mock import patch
+
+    # pyproject.toml with [project] but NO dependencies key
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname = \"myapp\"\nversion = \"0.1.0\"\n"
+    )
+    osv = from_fixture(fixtures_dir / "osv_pypi_fixable.json")
+
+    # Patch apply_plan to raise KeyError, simulating what happens when
+    # _edit_pyproject_pep621 encounters a missing [project.dependencies].
+    with patch("scripts.scope_python.apply_plan",
+               side_effect=KeyError("[project.dependencies] not found")):
+        results = run(tmp_path, Config(), osv, dry_run=True)
+
+    assert len(results) == 1
+    result = results[0]
+    # Issue fallback in dry_run returns kind="noop"; summary must mention
+    # "blocked" confirming the KeyError handler was reached, not a clean path.
+    assert result.kind == "noop"
+    assert "blocked" in result.summary
