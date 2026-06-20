@@ -1,0 +1,16 @@
+{
+  "results": [{
+    "source": {"path": "package.json", "type": "lockfile"},
+    "packages": [{
+      "package": {"name": "lodash", "version": "4.17.20", "ecosystem": "npm"},
+      "vulnerabilities": [{
+        "id": "GHSA-npm-test", "summary": "lodash advisory",
+        "affected": [{
+          "package": {"name": "lodash", "ecosystem": "npm"},
+          "ranges": [{"type": "SEMVER",
+                      "events": [{"introduced": "0"}, {"fixed": "4.17.21"}]}]
+        }]
+      }]
+    }]
+  }]
+}
