@@ -1,0 +1,17 @@
+# Process artifacts (specs/plans live local, not committed)
+docs/superpowers/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
