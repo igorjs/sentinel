@@ -1,0 +1,35 @@
+name: self-test
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      scopes: ${{ steps.s.outputs.scopes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./discover
+        id: s
+
+  run:
+    needs: discover
+    if: needs.discover.outputs.scopes != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        scope: ${{ fromJson(needs.discover.outputs.scopes) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          scope: ${{ matrix.scope }}
+          dry_run: "true"
