@@ -12,7 +12,11 @@ def run_cli(*args: str, cwd: Path) -> subprocess.CompletedProcess:
     env["PYTHONPATH"] = _PROJECT_ROOT
     return subprocess.run(
         [sys.executable, "-m", "scripts.sentinel", *args],
-        capture_output=True, check=True, text=True, cwd=cwd, env=env,
+        capture_output=True,
+        check=True,
+        text=True,
+        cwd=cwd,
+        env=env,
     )
 
 

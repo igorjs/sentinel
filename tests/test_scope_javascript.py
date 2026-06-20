@@ -8,9 +8,7 @@ from scripts.scope_javascript import detect, detect_pkg_manager, plan
 
 @pytest.fixture
 def workdir(tmp_path: Path, fixtures_dir: Path) -> Path:
-    (tmp_path / "package.json").write_text(
-        (fixtures_dir / "package_json.json").read_text()
-    )
+    (tmp_path / "package.json").write_text((fixtures_dir / "package_json.json").read_text())
     return tmp_path
 
 

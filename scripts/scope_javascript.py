@@ -1,5 +1,6 @@
 """javascript scope: bump npm deps when OSV reports a fixable advisory.
 Detects lockfile to pick npm/pnpm/yarn. No lockfile → issue fallback."""
+
 from __future__ import annotations
 
 import re
@@ -47,20 +48,27 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
             if key in seen:
                 continue
             seen.add(key)
-            fixed = sorted({
-                e["fixed"]
-                for r in affected.get("ranges", [])
-                for e in r.get("events", [])
-                if "fixed" in e
-            }, key=_parse)
+            fixed = sorted(
+                {
+                    e["fixed"]
+                    for r in affected.get("ranges", [])
+                    for e in r.get("events", [])
+                    if "fixed" in e
+                },
+                key=_parse,
+            )
             if not fixed:
                 continue
-            drifts.append(Drift(
-                scope=SCOPE, key=adv["id"],
-                summary=adv.get("summary", adv["id"]),
-                fixed_versions=fixed, current="",
-                raw={"module": module, "advisory": adv},
-            ))
+            drifts.append(
+                Drift(
+                    scope=SCOPE,
+                    key=adv["id"],
+                    summary=adv.get("summary", adv["id"]),
+                    fixed_versions=fixed,
+                    current="",
+                    raw={"module": module, "advisory": adv},
+                )
+            )
     return drifts
 
 
@@ -75,20 +83,19 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str) -> Plan:
         f"Opened automatically by [sentinel]"
         f"(https://github.com/igorjs/sentinel).\n"
     )
-    lockfiles = {"npm": "package-lock.json", "pnpm": "pnpm-lock.yaml",
-                 "yarn": "yarn.lock"}
+    lockfiles = {"npm": "package-lock.json", "pnpm": "pnpm-lock.yaml", "yarn": "yarn.lock"}
     return Plan(
-        scope=SCOPE, key=drift.key,
+        scope=SCOPE,
+        key=drift.key,
         branch=f"sentinel/javascript/{drift.key.lower()}",
-        title=title, body=body,
+        title=title,
+        body=body,
         files_changed=["package.json", lockfiles[pkg_manager]],
         commands=[_BUMP_CMD[pkg_manager](module, fix)],
     )
 
 
-def run(
-    workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool
-) -> list[Result]:
+def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     if not (workdir / "package.json").exists():
         return []
     pm = detect_pkg_manager(workdir)
@@ -97,33 +104,46 @@ def run(
         any_fixable = detect(workdir, osv)
         if not any_fixable:
             return []
-        return [open_issue_fallback(
-            scope=SCOPE, key="no-lockfile",
-            title="sentinel: javascript no lockfile detected",
-            body=(
-                "package.json present but no lockfile (package-lock.json / "
-                "pnpm-lock.yaml / yarn.lock) found. Sentinel cannot safely "
-                "auto-bump npm deps without a lockfile.\n\n"
-                f"{len(any_fixable)} fixable advisor(ies) detected. "
-                "Commit a lockfile to enable auto-bumping."
-            ),
-            dry_run=dry_run, workdir=workdir,
-        )]
+        return [
+            open_issue_fallback(
+                scope=SCOPE,
+                key="no-lockfile",
+                title="sentinel: javascript no lockfile detected",
+                body=(
+                    "package.json present but no lockfile (package-lock.json / "
+                    "pnpm-lock.yaml / yarn.lock) found. Sentinel cannot safely "
+                    "auto-bump npm deps without a lockfile.\n\n"
+                    f"{len(any_fixable)} fixable advisor(ies) detected. "
+                    "Commit a lockfile to enable auto-bumping."
+                ),
+                dry_run=dry_run,
+                workdir=workdir,
+            )
+        ]
     results: list[Result] = []
     base_sha = capture_base_sha(workdir) if not dry_run else ""
     for drift in detect(workdir, osv):
         p = plan(workdir, drift, pm)
         try:
-            results.append(apply_plan(
-                p, dry_run=dry_run, workdir=workdir, base_sha=base_sha,
-            ))
+            results.append(
+                apply_plan(
+                    p,
+                    dry_run=dry_run,
+                    workdir=workdir,
+                    base_sha=base_sha,
+                )
+            )
         except subprocess.CalledProcessError as e:
-            results.append(open_issue_fallback(
-                scope=SCOPE, key=drift.key,
-                title=f"sentinel: javascript bump blocked for {drift.key}",
-                body=f"`{pm}` failed (exit {e.returncode}). Manual review needed.",
-                dry_run=dry_run, workdir=workdir,
-            ))
+            results.append(
+                open_issue_fallback(
+                    scope=SCOPE,
+                    key=drift.key,
+                    title=f"sentinel: javascript bump blocked for {drift.key}",
+                    body=f"`{pm}` failed (exit {e.returncode}). Manual review needed.",
+                    dry_run=dry_run,
+                    workdir=workdir,
+                )
+            )
     return results
 
 

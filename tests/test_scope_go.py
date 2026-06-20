@@ -13,9 +13,7 @@ from scripts.scope_go import (
 
 @pytest.fixture
 def workdir(tmp_path: Path, fixtures_dir: Path) -> Path:
-    (tmp_path / "go.mod").write_text(
-        (fixtures_dir / "go_mod_1_24_4.mod").read_text()
-    )
+    (tmp_path / "go.mod").write_text((fixtures_dir / "go_mod_1_24_4.mod").read_text())
     return tmp_path
 
 
@@ -40,9 +38,7 @@ def test_detect_runtime_drift_finds_stdlib(workdir: Path, fixtures_dir: Path):
     assert drift.current == "1.24.4"
 
 
-def test_detect_runtime_drift_none_when_no_stdlib(
-    workdir: Path, fixtures_dir: Path
-):
+def test_detect_runtime_drift_none_when_no_stdlib(workdir: Path, fixtures_dir: Path):
     osv = from_fixture(fixtures_dir / "osv_go_deps.json")
     assert detect_runtime_drift(workdir, osv, workdir / "go.mod") is None
 

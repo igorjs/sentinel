@@ -1,4 +1,5 @@
 """yaml-env-var target_kind. Lazy-loads ruamel.yaml inside functions."""
+
 from __future__ import annotations
 
 import re
@@ -14,10 +15,9 @@ def read_value(file: Path, env_var: str, env_path: str = "env") -> str | None:
     return str(value) if value is not None else None
 
 
-def write_value(
-    file: Path, env_var: str, new_value: str, env_path: str = "env"
-) -> None:
+def write_value(file: Path, env_var: str, new_value: str, env_path: str = "env") -> None:
     from ruamel.yaml import YAML
+
     yaml = YAML()
     yaml.preserve_quotes = True
     data = yaml.load(file.read_text())
@@ -31,6 +31,7 @@ def write_value(
 
 def _load_block(file: Path, env_path: str) -> dict[str, Any] | None:
     from ruamel.yaml import YAML
+
     yaml = YAML()
     yaml.preserve_quotes = True
     data = yaml.load(file.read_text())

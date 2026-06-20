@@ -1,4 +1,5 @@
 """go scope: bumps module deps + optionally the `go <version>` runtime directive."""
+
 from __future__ import annotations
 
 import re
@@ -13,9 +14,7 @@ from scripts.types import Drift, Plan, Result
 SCOPE = "go"
 
 
-def detect_module_drifts(
-    workdir: Path, osv: OsvCache, gomod_path: Path
-) -> list[Drift]:
+def detect_module_drifts(workdir: Path, osv: OsvCache, gomod_path: Path) -> list[Drift]:
     if not gomod_path.exists():
         return []
     drifts: list[Drift] = []
@@ -29,26 +28,31 @@ def detect_module_drifts(
             if key in seen:
                 continue
             seen.add(key)
-            fixed = sorted({
-                e["fixed"]
-                for r in affected.get("ranges", [])
-                for e in r.get("events", [])
-                if "fixed" in e
-            }, key=_parse)
+            fixed = sorted(
+                {
+                    e["fixed"]
+                    for r in affected.get("ranges", [])
+                    for e in r.get("events", [])
+                    if "fixed" in e
+                },
+                key=_parse,
+            )
             if not fixed:
                 continue
-            drifts.append(Drift(
-                scope=SCOPE, key=adv["id"],
-                summary=adv.get("summary", adv["id"]),
-                fixed_versions=fixed, current="",
-                raw={"module": module, "advisory": adv},
-            ))
+            drifts.append(
+                Drift(
+                    scope=SCOPE,
+                    key=adv["id"],
+                    summary=adv.get("summary", adv["id"]),
+                    fixed_versions=fixed,
+                    current="",
+                    raw={"module": module, "advisory": adv},
+                )
+            )
     return drifts
 
 
-def detect_runtime_drift(
-    workdir: Path, osv: OsvCache, gomod_path: Path
-) -> Drift | None:
+def detect_runtime_drift(workdir: Path, osv: OsvCache, gomod_path: Path) -> Drift | None:
     if not gomod_path.exists():
         return None
     current = _current_directive(gomod_path.read_text())
@@ -58,19 +62,21 @@ def detect_runtime_drift(
     advisory_ids: list[str] = []
     for adv in osv.fixable_advisories("Go"):
         is_stdlib = any(
-            a.get("package", {}).get("name") == "stdlib"
-            for a in adv.get("affected", [])
+            a.get("package", {}).get("name") == "stdlib" for a in adv.get("affected", [])
         )
         if not is_stdlib:
             continue
-        candidates = sorted({
-            e["fixed"]
-            for a in adv.get("affected", [])
-            if a.get("package", {}).get("name") == "stdlib"
-            for r in a.get("ranges", [])
-            for e in r.get("events", [])
-            if "fixed" in e
-        }, key=_parse)
+        candidates = sorted(
+            {
+                e["fixed"]
+                for a in adv.get("affected", [])
+                if a.get("package", {}).get("name") == "stdlib"
+                for r in a.get("ranges", [])
+                for e in r.get("events", [])
+                if "fixed" in e
+            },
+            key=_parse,
+        )
         best = next((v for v in candidates if _ge(v, current)), None)
         if best is None:
             continue
@@ -101,9 +107,11 @@ def plan_module(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
         f"(https://github.com/igorjs/sentinel).\n"
     )
     return Plan(
-        scope=SCOPE, key=drift.key,
+        scope=SCOPE,
+        key=drift.key,
         branch=f"sentinel/go/{drift.key.lower()}",
-        title=title, body=body,
+        title=title,
+        body=body,
         files_changed=[
             str(gomod_path.relative_to(workdir)),
             str((gomod_path.parent / "go.sum").relative_to(workdir)),
@@ -131,14 +139,19 @@ def plan_runtime(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
     def edit_gomod() -> None:
         text = gomod_path.read_text()
         new_text = re.sub(
-            r"^go\s+\S+\s*$", f"go {target}", text, count=1, flags=re.MULTILINE,
+            r"^go\s+\S+\s*$",
+            f"go {target}",
+            text,
+            count=1,
+            flags=re.MULTILINE,
         )
         gomod_path.write_text(new_text)
 
     edit_gomod.__name__ = "edit_gomod_directive"
 
     return Plan(
-        scope=SCOPE, key=drift.key,
+        scope=SCOPE,
+        key=drift.key,
         branch=f"sentinel/go/runtime-{target}",
         title=f"go: bump runtime to {target}",
         body=body,
@@ -148,13 +161,9 @@ def plan_runtime(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
     )
 
 
-def run(
-    workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool
-) -> list[Result]:
+def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     override = config.scopes.get(SCOPE)
-    gomod_path = workdir / (
-        override.gomod_path if override and override.gomod_path else "go.mod"
-    )
+    gomod_path = workdir / (override.gomod_path if override and override.gomod_path else "go.mod")
     update_runtime = override.update_runtime if override else True
 
     results: list[Result] = []
@@ -163,41 +172,59 @@ def run(
     for drift in detect_module_drifts(workdir, osv, gomod_path):
         p = plan_module(workdir, drift, gomod_path)
         try:
-            results.append(apply_plan(
-                p, dry_run=dry_run, workdir=workdir, base_sha=base_sha,
-            ))
+            results.append(
+                apply_plan(
+                    p,
+                    dry_run=dry_run,
+                    workdir=workdir,
+                    base_sha=base_sha,
+                )
+            )
         except subprocess.CalledProcessError as e:
-            results.append(open_issue_fallback(
-                scope=SCOPE, key=drift.key,
-                title=f"sentinel: go bump blocked for {drift.key}",
-                body=f"`go get` failed (exit {e.returncode}). Manual review needed.",
-                dry_run=dry_run, workdir=workdir,
-            ))
+            results.append(
+                open_issue_fallback(
+                    scope=SCOPE,
+                    key=drift.key,
+                    title=f"sentinel: go bump blocked for {drift.key}",
+                    body=f"`go get` failed (exit {e.returncode}). Manual review needed.",
+                    dry_run=dry_run,
+                    workdir=workdir,
+                )
+            )
 
     runtime_drift = detect_runtime_drift(workdir, osv, gomod_path)
     if runtime_drift:
         if update_runtime:
             p = plan_runtime(workdir, runtime_drift, gomod_path)
-            results.append(apply_plan(
-                p, dry_run=dry_run, workdir=workdir, base_sha=base_sha,
-            ))
+            results.append(
+                apply_plan(
+                    p,
+                    dry_run=dry_run,
+                    workdir=workdir,
+                    base_sha=base_sha,
+                )
+            )
         else:
             advisories = runtime_drift.raw["advisory_ids"]
             target = runtime_drift.raw["target"]
-            results.append(open_issue_fallback(
-                scope=SCOPE, key=runtime_drift.key,
-                title=f"sentinel: go runtime bump required ({target})",
-                body=(
-                    f"Sentinel detected Go stdlib advisories that can only be "
-                    f"cleared by bumping the Go runtime from "
-                    f"`{runtime_drift.current}` to `{target}`.\n\n"
-                    f"`update_runtime = false` is set for this scope, so "
-                    f"sentinel will not edit the `go` directive automatically.\n\n"
-                    f"Affected advisories:\n" +
-                    "\n".join(f"- [{a}](https://osv.dev/{a})" for a in advisories)
-                ),
-                dry_run=dry_run, workdir=workdir,
-            ))
+            results.append(
+                open_issue_fallback(
+                    scope=SCOPE,
+                    key=runtime_drift.key,
+                    title=f"sentinel: go runtime bump required ({target})",
+                    body=(
+                        f"Sentinel detected Go stdlib advisories that can only be "
+                        f"cleared by bumping the Go runtime from "
+                        f"`{runtime_drift.current}` to `{target}`.\n\n"
+                        f"`update_runtime = false` is set for this scope, so "
+                        f"sentinel will not edit the `go` directive automatically.\n\n"
+                        f"Affected advisories:\n"
+                        + "\n".join(f"- [{a}](https://osv.dev/{a})" for a in advisories)
+                    ),
+                    dry_run=dry_run,
+                    workdir=workdir,
+                )
+            )
     return results
 
 

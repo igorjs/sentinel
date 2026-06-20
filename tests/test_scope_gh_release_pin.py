@@ -18,7 +18,8 @@ def workflow(tmp_path: Path, fixtures_dir: Path) -> Path:
 @pytest.fixture
 def custom() -> CustomScope:
     return CustomScope(
-        name="libkrun-bottle", kind="gh-release-pin",
+        name="libkrun-bottle",
+        kind="gh-release-pin",
         extra={
             "upstream_repo": "igorjs/libkrun-builds",
             "target_file": ".github/workflows/release.yml",
@@ -40,8 +41,7 @@ def test_detect_noop_when_same(workflow, custom, tmp_path):
 
 
 def test_plan_edits_workflow_file(workflow, custom, tmp_path):
-    drift = detect(tmp_path, custom,
-                   latest_resolver=lambda repo: "v0.19.0")[0]
+    drift = detect(tmp_path, custom, latest_resolver=lambda repo: "v0.19.0")[0]
     p = plan(tmp_path, drift, custom)
     for step in p.post_steps:
         step()

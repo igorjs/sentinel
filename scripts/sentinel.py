@@ -1,4 +1,5 @@
 """sentinel CLI entry point."""
+
 from __future__ import annotations
 
 import argparse
@@ -73,18 +74,22 @@ def _gomod_path(config: Config) -> str:
 
 
 def _has_python(workdir: Path) -> bool:
-    return any((workdir / f).exists() for f in (
-        "pyproject.toml", "requirements.txt",
-        "poetry.lock", "uv.lock", "Pipfile.lock",
-    ))
+    return any(
+        (workdir / f).exists()
+        for f in (
+            "pyproject.toml",
+            "requirements.txt",
+            "poetry.lock",
+            "uv.lock",
+            "Pipfile.lock",
+        )
+    )
 
 
 def _run_scope(workdir: Path, config: Config, scope: str, *, dry_run: bool) -> int:
     if scope in BUILTIN_SCOPES:
         osv = OsvCache.scan(workdir)
-        results = BUILTIN_SCOPES[scope].run(
-            workdir, config, osv, dry_run=dry_run
-        )
+        results = BUILTIN_SCOPES[scope].run(workdir, config, osv, dry_run=dry_run)
     else:
         custom = next((c for c in config.custom if c.name == scope), None)
         if custom is None:
@@ -92,8 +97,10 @@ def _run_scope(workdir: Path, config: Config, scope: str, *, dry_run: bool) -> i
             return 2
         if custom.kind == "gh-release-pin":
             results = scope_gh_release_pin.run(
-                workdir, Config(custom=[custom]),
-                OsvCache({"results": []}), dry_run=dry_run,
+                workdir,
+                Config(custom=[custom]),
+                OsvCache({"results": []}),
+                dry_run=dry_run,
             )
         else:
             print(f"unknown custom kind: {custom.kind}", file=sys.stderr)

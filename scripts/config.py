@@ -1,4 +1,5 @@
 """TOML config loader for .github/sentinel.toml."""
+
 from __future__ import annotations
 
 import tomllib
@@ -32,9 +33,7 @@ class CustomScope:
 
 @dataclass
 class Defaults:
-    pr_labels: list[str] = field(
-        default_factory=lambda: ["dependencies", "automated"]
-    )
+    pr_labels: list[str] = field(default_factory=lambda: ["dependencies", "automated"])
 
 
 @dataclass
@@ -67,14 +66,14 @@ def load_config(path: Path | None) -> Config:
             raise ConfigError(f"custom[{i}] must be a table")
         missing = _REQUIRED_CUSTOM - raw.keys()
         if missing:
-            raise ConfigError(
-                f"custom[{i}]: missing required key(s): {sorted(missing)}"
+            raise ConfigError(f"custom[{i}]: missing required key(s): {sorted(missing)}")
+        cfg.custom.append(
+            CustomScope(
+                name=str(raw["name"]),
+                kind=str(raw["kind"]),
+                extra={k: v for k, v in raw.items() if k not in _REQUIRED_CUSTOM},
             )
-        cfg.custom.append(CustomScope(
-            name=str(raw["name"]),
-            kind=str(raw["kind"]),
-            extra={k: v for k, v in raw.items() if k not in _REQUIRED_CUSTOM},
-        ))
+        )
 
     defaults = data.get("defaults") or {}
     if defaults:
@@ -91,6 +90,4 @@ def load_config(path: Path | None) -> Config:
 def _reject_unknown(data: dict, allowed: set[str], *, where: str) -> None:
     extras = set(data.keys()) - allowed
     if extras:
-        raise ConfigError(
-            f"{where}: unknown key(s): {sorted(extras)} (allowed: {sorted(allowed)})"
-        )
+        raise ConfigError(f"{where}: unknown key(s): {sorted(extras)} (allowed: {sorted(allowed)})")

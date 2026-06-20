@@ -30,8 +30,6 @@ def test_write_updates_only_target_var(workflow: Path):
 
 def test_write_at_job_level(tmp_path: Path):
     p = tmp_path / "wf.yml"
-    p.write_text(
-        "jobs:\n  publish:\n    env:\n      MYVAR: \"a\"\n    runs-on: x\n"
-    )
+    p.write_text('jobs:\n  publish:\n    env:\n      MYVAR: "a"\n    runs-on: x\n')
     write_value(p, "MYVAR", "b", env_path="jobs.publish.env")
     assert '"b"' in p.read_text() or "MYVAR: b" in p.read_text()
