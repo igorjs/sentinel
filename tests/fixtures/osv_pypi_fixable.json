@@ -1,0 +1,16 @@
+{
+  "results": [{
+    "source": {"path": "pyproject.toml", "type": "lockfile"},
+    "packages": [{
+      "package": {"name": "requests", "version": "2.28.0", "ecosystem": "PyPI"},
+      "vulnerabilities": [{
+        "id": "GHSA-pypi-test", "summary": "requests advisory",
+        "affected": [{
+          "package": {"name": "requests", "ecosystem": "PyPI"},
+          "ranges": [{"type": "SEMVER",
+                      "events": [{"introduced": "0"}, {"fixed": "2.32.0"}]}]
+        }]
+      }]
+    }]
+  }]
+}
