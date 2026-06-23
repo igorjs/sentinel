@@ -15,7 +15,14 @@ class OsvCache:
     @classmethod
     def scan(cls, workdir: Path) -> OsvCache:
         cmd = ["osv-scanner", "--format", "json", "--recursive", str(workdir)]
-        result = subprocess.run(cmd, capture_output=True, check=False, text=True)
+        try:
+            result = subprocess.run(cmd, capture_output=True, check=False, text=True)
+        except FileNotFoundError as e:
+            raise RuntimeError(
+                "osv-scanner not found on PATH. The sentinel action installs it "
+                "automatically; if you are running sentinel locally, install osv-scanner "
+                "first (https://github.com/google/osv-scanner)."
+            ) from e
         if result.returncode not in (0, 1):
             raise RuntimeError(f"osv-scanner failed (exit {result.returncode}): {result.stderr}")
         return cls(json.loads(result.stdout or '{"results": []}'))

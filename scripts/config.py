@@ -12,6 +12,13 @@ _ALLOWED_SCOPE_OVERRIDE = {"enabled", "gomod_path", "update_runtime"}
 _REQUIRED_CUSTOM = {"name", "kind"}
 _ALLOWED_DEFAULTS = {"pr_labels"}
 
+# Per-kind required keys (beyond name/kind) for custom scopes. Validated at load
+# time so a misconfigured scope fails loud here instead of with a bare KeyError
+# mid-run.
+_REQUIRED_CUSTOM_EXTRA = {
+    "gh-release-pin": {"upstream_repo", "target_file", "target_kind", "env_var"},
+}
+
 
 class ConfigError(ValueError):
     pass
@@ -67,10 +74,17 @@ def load_config(path: Path | None) -> Config:
         missing = _REQUIRED_CUSTOM - raw.keys()
         if missing:
             raise ConfigError(f"custom[{i}]: missing required key(s): {sorted(missing)}")
+        kind = str(raw["kind"])
+        required_extra = _REQUIRED_CUSTOM_EXTRA.get(kind, set())
+        missing_extra = required_extra - raw.keys()
+        if missing_extra:
+            raise ConfigError(
+                f"custom[{i}] (kind={kind!r}): missing required key(s): {sorted(missing_extra)}"
+            )
         cfg.custom.append(
             CustomScope(
                 name=str(raw["name"]),
-                kind=str(raw["kind"]),
+                kind=kind,
                 extra={k: v for k, v in raw.items() if k not in _REQUIRED_CUSTOM},
             )
         )
