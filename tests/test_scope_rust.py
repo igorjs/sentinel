@@ -3,8 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from scripts.osv import from_fixture
-from scripts.scope_rust import detect, plan
+from scripts.config import Config
+from scripts.osv import OsvCache, from_fixture
+from scripts.scope_rust import detect, plan, run
 
 
 @pytest.fixture
@@ -50,3 +51,69 @@ def test_plan_cleans_deny_toml(workdir: Path, fixtures_dir: Path):
     for step in p.post_steps:
         step()
     assert "RUSTSEC-2024-9999" not in (workdir / "deny.toml").read_text()
+
+
+def _cargo_lock(tmp_path):
+    (tmp_path / "Cargo.lock").write_text('[[package]]\nname = "tokio"\nversion = "1.30.0"\n')
+
+
+def _osv_with_severity(vector):
+    return OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "crates.io", "name": "tokio"},
+                            "vulnerabilities": [
+                                {
+                                    "id": "RUSTSEC-2024-1",
+                                    "summary": "s",
+                                    "severity": [{"type": "CVSS_V3", "score": vector}],
+                                    "affected": [
+                                        {
+                                            "package": {"name": "tokio"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"introduced": "0"},
+                                                        {"fixed": "1.32.0"},
+                                                    ]
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+
+def test_detect_sets_severity_band(tmp_path):
+    _cargo_lock(tmp_path)
+    osv = _osv_with_severity("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")  # 9.8 critical
+    drift = detect(tmp_path, osv)[0]
+    assert drift.severity == "critical"
+
+
+def test_run_skips_below_threshold(tmp_path, capsys):
+    _cargo_lock(tmp_path)
+    osv = _osv_with_severity("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L")  # 3.7 low
+    cfg = Config()
+    cfg.defaults.min_severity = "high"
+    results = run(tmp_path, cfg, osv, dry_run=True)
+    assert results == []  # low < high → skipped
+    assert "skipped 1" in capsys.readouterr().out
+
+
+def test_run_acts_when_at_threshold(tmp_path):
+    _cargo_lock(tmp_path)
+    osv = _osv_with_severity("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H")  # critical
+    cfg = Config()
+    cfg.defaults.min_severity = "high"
+    results = run(tmp_path, cfg, osv, dry_run=True)
+    assert len(results) == 1
