@@ -7,7 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from scripts.config import Config
+from scripts.config import Config, effective_min_severity
 from scripts.osv import OsvCache
 from scripts.pr import (
     apply_plan,
@@ -16,6 +16,7 @@ from scripts.pr import (
     open_issue_fallback,
     open_unsafe_identifier_issue,
 )
+from scripts.severity import derive_severity, gate, severity_line
 from scripts.types import Drift, Plan, Result
 from scripts.validate import UnsafeIdentifier, ensure_safe
 from scripts.version import version_key
@@ -81,6 +82,7 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
                     summary=adv.get("summary", adv["id"]),
                     fixed_versions=fixed,
                     current="",
+                    severity=derive_severity(adv),
                     raw={"module": module, "advisory": adv},
                 )
             )
@@ -95,6 +97,7 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str) -> Plan:
     body = (
         f"Closes [{drift.key}](https://osv.dev/{drift.key}).\n\n"
         f"**Advisory:** {drift.summary}\n\n"
+        f"{severity_line(drift.severity)}\n\n"
         f"**Bump:** `{module}` → {fix} (via {pkg_manager})\n\n"
         f"Opened automatically by [sentinel]"
         f"(https://github.com/igorjs/sentinel).\n"
@@ -180,7 +183,11 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
         ]
     results: list[Result] = []
     base_sha = capture_base_sha(workdir) if not dry_run else ""
-    for drift in detect(workdir, osv):
+    threshold = effective_min_severity(config, SCOPE)
+    detected, skipped = gate(detect(workdir, osv), threshold)
+    if skipped:
+        print(f"[{SCOPE}] skipped {skipped} advisor(ies) below min_severity={threshold}")
+    for drift in detected:
         try:
             p = plan(workdir, drift, pm)
         except UnsafeIdentifier as e:
