@@ -2,14 +2,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.osv import from_fixture
+from scripts.osv import OsvCache, from_fixture
 from scripts.scope_go import (
     detect_module_drifts,
     detect_runtime_drift,
     plan_module,
     plan_runtime,
 )
-from scripts.severity import SEVERITY_ORDER
 
 
 @pytest.fixture
@@ -69,7 +68,49 @@ def test_module_drift_sets_severity(workdir: Path, fixtures_dir: Path):
     assert drifts[0].severity == "unknown"
 
 
-def test_runtime_drift_severity_is_max_of_contributors(workdir: Path, fixtures_dir: Path):
-    osv = from_fixture(fixtures_dir / "osv_go_stdlib.json")
+def _stdlib_adv(adv_id, fixed, vector):
+    return {
+        "id": adv_id,
+        "summary": "s",
+        "severity": [{"type": "CVSS_V3", "score": vector}],
+        "affected": [
+            {
+                "package": {"name": "stdlib"},
+                "ranges": [{"events": [{"introduced": "0"}, {"fixed": fixed}]}],
+            }
+        ],
+    }
+
+
+def test_runtime_drift_severity_is_max_of_contributors(workdir: Path):
+    # Two stdlib advisories at different severities (low + high) → runtime drift
+    # takes the MAX. go.mod fixture is `go 1.24.4`, so both fixes are >= current.
+    osv = OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "Go", "name": "stdlib"},
+                            "vulnerabilities": [
+                                _stdlib_adv(
+                                    "GO-LOW",
+                                    "1.24.5",
+                                    "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L",  # 3.7 low
+                                ),
+                                _stdlib_adv(
+                                    "GO-HIGH",
+                                    "1.25.0",
+                                    "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",  # 7.5 high
+                                ),
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
     drift = detect_runtime_drift(workdir, osv, workdir / "go.mod")
-    assert drift.severity in SEVERITY_ORDER or drift.severity == "unknown"
+    assert drift is not None
+    assert drift.severity == "high"  # max(low, high)
+    assert drift.raw["target"] == "1.25.0"  # max fixed version
