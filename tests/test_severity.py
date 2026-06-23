@@ -115,3 +115,25 @@ def test_gate_keeps_and_counts():
 def test_severity_line_discloses_unknown():
     assert severity_line("high") == "**Severity:** high"
     assert "bumping anyway" in severity_line("unknown")
+
+
+def test_derive_severity_uses_provided_score():
+    # osv-scanner v2.4.0 supplies a precomputed numeric score (groups[].max_severity).
+    assert derive_severity({}, score=8.6) == "high"
+    assert derive_severity({}, score=9.1) == "critical"
+    assert derive_severity({}, score=0.0) == "none"
+
+
+def test_derive_severity_score_takes_precedence_over_vector():
+    adv = {
+        "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L"}]
+    }
+    assert derive_severity(adv, score=9.8) == "critical"  # explicit score wins over v1 vector
+
+
+def test_derive_severity_falls_back_to_vector_when_no_score():
+    adv = {
+        "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"}]
+    }
+    assert derive_severity(adv) == "critical"  # v1.x fallback still works
+    assert derive_severity({}) == "unknown"

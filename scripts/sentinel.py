@@ -88,7 +88,9 @@ def _has_python(workdir: Path) -> bool:
 
 def _run_scope(workdir: Path, config: Config, scope: str, *, dry_run: bool) -> int:
     if scope in BUILTIN_SCOPES:
-        osv = OsvCache.scan(workdir)
+        # scan_with_recovery also surfaces advisories suppressed in osv-scanner.toml
+        # that now have a fix, so they can be bumped (and their suppression cleaned).
+        osv = OsvCache.scan_with_recovery(workdir)
         results = BUILTIN_SCOPES[scope].run(workdir, config, osv, dry_run=dry_run)
     else:
         custom = next((c for c in config.custom if c.name == scope), None)
