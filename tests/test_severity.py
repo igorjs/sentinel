@@ -5,8 +5,12 @@ from scripts.severity import (
     band_for_score,
     cvss_base_score,
     derive_severity,
+    gate,
+    meets_threshold,
     normalize_label,
+    severity_line,
 )
+from scripts.types import Drift
 
 
 @pytest.mark.parametrize(
@@ -81,3 +85,33 @@ def test_derive_severity_falls_back_to_label_when_no_parsable_vector():
 def test_derive_severity_unknown_when_nothing_usable():
     assert derive_severity({}) == "unknown"
     assert derive_severity({"database_specific": {"severity": "weird"}}) == "unknown"
+
+
+def test_meets_threshold_none_means_no_gating():
+    assert meets_threshold("low", None) is True
+
+
+def test_meets_threshold_unknown_acts_fail_open():
+    assert meets_threshold("unknown", "critical") is True
+
+
+def test_meets_threshold_rank_compare():
+    assert meets_threshold("high", "medium") is True
+    assert meets_threshold("low", "high") is False
+    assert meets_threshold("high", "high") is True
+
+
+def test_gate_keeps_and_counts():
+    drifts = [
+        Drift(scope="x", key="a", summary="", fixed_versions=[], current="", severity="low"),
+        Drift(scope="x", key="b", summary="", fixed_versions=[], current="", severity="high"),
+        Drift(scope="x", key="c", summary="", fixed_versions=[], current="", severity="unknown"),
+    ]
+    kept, skipped = gate(drifts, "high")
+    assert [d.key for d in kept] == ["b", "c"]  # high passes, unknown fails-open
+    assert skipped == 1
+
+
+def test_severity_line_discloses_unknown():
+    assert severity_line("high") == "**Severity:** high"
+    assert "bumping anyway" in severity_line("unknown")

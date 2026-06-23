@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import math
 
+from scripts.types import Drift
+
 SEVERITY_ORDER = ["none", "low", "medium", "high", "critical"]
 
 _AV = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.20}
@@ -96,3 +98,22 @@ def derive_severity(advisory: dict) -> str:
         if norm:
             return norm
     return "unknown"
+
+
+def meets_threshold(severity: str, min_severity: str | None) -> bool:
+    if min_severity is None:
+        return True
+    if severity == "unknown":
+        return True
+    return SEVERITY_ORDER.index(severity) >= SEVERITY_ORDER.index(min_severity)
+
+
+def gate(drifts: list[Drift], min_severity: str | None) -> tuple[list[Drift], int]:
+    kept = [d for d in drifts if meets_threshold(d.severity, min_severity)]
+    return kept, len(drifts) - len(kept)
+
+
+def severity_line(severity: str) -> str:
+    if severity == "unknown":
+        return "**Severity:** unknown — not provided by advisory; bumping anyway"
+    return f"**Severity:** {severity}"
