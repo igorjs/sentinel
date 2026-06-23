@@ -53,7 +53,7 @@ jobs:
     outputs:
       scopes: ${{ steps.s.outputs.scopes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: igorjs/sentinel/discover@v0.1
         id: s
 
@@ -66,7 +66,7 @@ jobs:
       matrix:
         scope: ${{ fromJson(needs.discover.outputs.scopes) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: igorjs/sentinel@v0.1
         with:
           scope: ${{ matrix.scope }}
