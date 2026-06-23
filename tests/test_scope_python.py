@@ -3,8 +3,9 @@ from pathlib import Path
 import pytest
 
 from scripts.config import Config
-from scripts.osv import from_fixture
+from scripts.osv import OsvCache, from_fixture
 from scripts.scope_python import detect, detect_pkg_manager, plan, run
+from scripts.scope_python import run as py_run
 
 
 @pytest.fixture
@@ -85,6 +86,52 @@ def test_plan_pyproject_edits_in_place(tmp_path: Path, fixtures_dir: Path):
     assert "requests==2.28.0" not in text
     # untouched dep preserved
     assert "click>=8.0" in text
+
+
+def _osv_requests(vector):
+    return OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "PyPI", "name": "requests"},
+                            "vulnerabilities": [
+                                {
+                                    "id": "PYSEC-1",
+                                    "summary": "s",
+                                    "severity": [{"type": "CVSS_V3", "score": vector}],
+                                    "affected": [
+                                        {
+                                            "package": {"name": "requests"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"introduced": "0"},
+                                                        {"fixed": "2.32.0"},
+                                                    ]
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+
+def test_run_skips_below_threshold(workdir, capsys):
+    (workdir / "uv.lock").write_text("")
+    osv = _osv_requests("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L")  # 3.7 low
+    cfg = Config()
+    cfg.defaults.min_severity = "high"
+    results = py_run(workdir, cfg, osv, dry_run=True)
+    assert results == []
+    assert "skipped 1" in capsys.readouterr().out
 
 
 def test_run_pyproject_missing_dependencies_key_returns_issue(tmp_path: Path, fixtures_dir: Path):
