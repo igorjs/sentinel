@@ -102,6 +102,25 @@ env_var = "LIBKRUN_BOTTLE_VERSION"
 # env_path = "jobs.publish.env"   # optional; default "env" (top-level)
 ```
 
+## Severity gating
+
+By default sentinel acts on every fixable advisory. To act only at or above a
+severity, set `min_severity` (one of `none`, `low`, `medium`, `high`,
+`critical`) globally or per scope in `.github/sentinel.toml`:
+
+```toml
+[defaults]
+min_severity = "high"      # global floor
+
+[scopes.javascript]
+min_severity = "critical"  # stricter for one scope
+```
+
+Severity comes from the advisory's CVSS v3 vector (or its qualitative label).
+Advisories with no severity data are bumped anyway (and the PR says so), so a
+serious-but-unscored CVE is never silently skipped. `gh-release-pin` scopes are
+freshness-driven and are not gated.
+
 ## How sentinel differs from Dependabot
 
 | Dimension | Dependabot | sentinel |
