@@ -7,10 +7,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from scripts.severity import SEVERITY_ORDER
+
 _ALLOWED_TOP = {"scopes", "custom", "defaults"}
-_ALLOWED_SCOPE_OVERRIDE = {"enabled", "gomod_path", "update_runtime"}
+_ALLOWED_SCOPE_OVERRIDE = {"enabled", "gomod_path", "update_runtime", "min_severity"}
 _REQUIRED_CUSTOM = {"name", "kind"}
-_ALLOWED_DEFAULTS = {"pr_labels"}
+_ALLOWED_DEFAULTS = {"pr_labels", "min_severity"}
 
 # Per-kind required keys (beyond name/kind) for custom scopes. Validated at load
 # time so a misconfigured scope fails loud here instead of with a bare KeyError
@@ -29,6 +31,7 @@ class ScopeOverride:
     enabled: bool = True
     gomod_path: str | None = None
     update_runtime: bool = True
+    min_severity: str | None = None
 
 
 @dataclass
@@ -41,6 +44,7 @@ class CustomScope:
 @dataclass
 class Defaults:
     pr_labels: list[str] = field(default_factory=lambda: ["dependencies", "automated"])
+    min_severity: str | None = None
 
 
 @dataclass
@@ -62,10 +66,16 @@ def load_config(path: Path | None) -> Config:
         if not isinstance(spec, dict):
             raise ConfigError(f"scopes.{name} must be a table")
         _reject_unknown(spec, _ALLOWED_SCOPE_OVERRIDE, where=f"scopes.{name}")
+        min_sev = spec.get("min_severity")
+        if min_sev is not None and min_sev not in SEVERITY_ORDER:
+            raise ConfigError(
+                f"scopes.{name}.min_severity must be one of {SEVERITY_ORDER}, got {min_sev!r}"
+            )
         cfg.scopes[name] = ScopeOverride(
             enabled=bool(spec.get("enabled", True)),
             gomod_path=spec.get("gomod_path"),
             update_runtime=bool(spec.get("update_runtime", True)),
+            min_severity=min_sev,
         )
 
     for i, raw in enumerate(data.get("custom") or []):
@@ -97,8 +107,21 @@ def load_config(path: Path | None) -> Config:
             if not (isinstance(labels, list) and all(isinstance(x, str) for x in labels)):
                 raise ConfigError("defaults.pr_labels must be a list of strings")
             cfg.defaults.pr_labels = list(labels)
+        min_sev = defaults.get("min_severity")
+        if min_sev is not None and min_sev not in SEVERITY_ORDER:
+            raise ConfigError(
+                f"defaults.min_severity must be one of {SEVERITY_ORDER}, got {min_sev!r}"
+            )
+        cfg.defaults.min_severity = min_sev
 
     return cfg
+
+
+def effective_min_severity(config: Config, scope: str) -> str | None:
+    override = config.scopes.get(scope)
+    if override and override.min_severity is not None:
+        return override.min_severity
+    return config.defaults.min_severity
 
 
 def _reject_unknown(data: dict, allowed: set[str], *, where: str) -> None:

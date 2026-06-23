@@ -72,3 +72,23 @@ def test_gh_release_pin_complete_extra_loads(tmp_path: Path):
     )
     cfg = load_config(p)
     assert cfg.custom[0].extra["env_var"] == "LIBKRUN_VERSION"
+
+
+def test_min_severity_loads_global_and_scope(tmp_path: Path):
+    from scripts.config import effective_min_severity
+
+    p = tmp_path / "ok.toml"
+    p.write_text('[defaults]\nmin_severity = "medium"\n\n[scopes.rust]\nmin_severity = "high"\n')
+    cfg = load_config(p)
+    assert cfg.defaults.min_severity == "medium"
+    assert cfg.scopes["rust"].min_severity == "high"
+    assert effective_min_severity(cfg, "rust") == "high"  # scope override wins
+    assert effective_min_severity(cfg, "go") == "medium"  # falls back to global
+    assert effective_min_severity(load_config(None), "rust") is None  # unset = no gating
+
+
+def test_invalid_min_severity_raises(tmp_path: Path):
+    p = tmp_path / "bad.toml"
+    p.write_text('[defaults]\nmin_severity = "urgent"\n')
+    with pytest.raises(ConfigError, match="min_severity"):
+        load_config(p)
