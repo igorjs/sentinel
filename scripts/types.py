@@ -12,6 +12,7 @@ class Drift:
     summary: str
     fixed_versions: list[str]
     current: str
+    severity: str = "unknown"
     raw: dict[str, Any] = field(default_factory=dict, hash=False, compare=False)
 
     def __hash__(self) -> int:

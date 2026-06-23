@@ -23,3 +23,19 @@ def test_plan_default_post_steps_empty():
 def test_result_kind_constrained():
     r = Result(scope="rust", key="k", kind="pr", summary="x")
     assert r.kind == "pr"
+
+
+def test_drift_defaults_severity_unknown():
+    from scripts.types import Drift
+
+    d = Drift(scope="rust", key="K", summary="s", fixed_versions=["1.0.0"], current="0.9.0")
+    assert d.severity == "unknown"
+
+
+def test_drift_severity_settable_and_not_in_hash():
+    from scripts.types import Drift
+
+    a = Drift(scope="rust", key="K", summary="s", fixed_versions=[], current="", severity="high")
+    b = Drift(scope="rust", key="K", summary="s", fixed_versions=[], current="", severity="low")
+    assert a.severity == "high"
+    assert hash(a) == hash(b)  # severity must not affect identity
