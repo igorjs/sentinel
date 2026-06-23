@@ -5,7 +5,6 @@ import pytest
 from scripts.config import Config
 from scripts.osv import OsvCache, from_fixture
 from scripts.scope_python import detect, detect_pkg_manager, plan, run
-from scripts.scope_python import run as py_run
 
 
 @pytest.fixture
@@ -129,7 +128,7 @@ def test_run_skips_below_threshold(workdir, capsys):
     osv = _osv_requests("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L")  # 3.7 low
     cfg = Config()
     cfg.defaults.min_severity = "high"
-    results = py_run(workdir, cfg, osv, dry_run=True)
+    results = run(workdir, cfg, osv, dry_run=True)
     assert results == []
     assert "skipped 1" in capsys.readouterr().out
 

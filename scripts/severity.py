@@ -22,7 +22,7 @@ _PR_CHANGED = {"N": 0.85, "L": 0.68, "H": 0.50}
 
 
 def cvss_base_score(vector: str) -> float | None:
-    if not vector.startswith(("CVSS:3.0", "CVSS:3.1")):
+    if not vector.startswith(("CVSS:3.0/", "CVSS:3.1/")):
         return None
     metrics: dict[str, str] = {}
     for part in vector.split("/")[1:]:
@@ -51,7 +51,7 @@ def cvss_base_score(vector: str) -> float | None:
     exploit = 8.22 * av * ac * pr * ui
     raw = 1.08 * (impact + exploit) if scope_changed else impact + exploit
     score = min(raw, 10.0)
-    if vector.startswith("CVSS:3.0"):
+    if vector.startswith("CVSS:3.0/"):
         return math.ceil(score * 10) / 10
     return _roundup(score)
 
@@ -115,5 +115,5 @@ def gate(drifts: list[Drift], min_severity: str | None) -> tuple[list[Drift], in
 
 def severity_line(severity: str) -> str:
     if severity == "unknown":
-        return "**Severity:** unknown — not provided by advisory; bumping anyway"
+        return "**Severity:** unknown (not provided by advisory; bumping anyway)"
     return f"**Severity:** {severity}"
