@@ -82,7 +82,7 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
                     summary=adv.get("summary", adv["id"]),
                     fixed_versions=fixed,
                     current="",
-                    severity=derive_severity(adv),
+                    severity=derive_severity(adv, score=osv.max_severity(adv["id"])),
                     raw={"module": module, "advisory": adv},
                 )
             )

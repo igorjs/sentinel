@@ -1,8 +1,10 @@
 """Derive one comparable severity per OSV advisory and gate by a threshold.
 
-Pure functions, no I/O. CVSS v3.0/v3.1 base scores are computed from the vector
-string (the OSV `severity[].score` field is a vector, not a number). v4-only or
-unparseable vectors return None so callers fall back to the qualitative label.
+Pure functions, no I/O. osv-scanner v2.x supplies a precomputed numeric CVSS
+score per advisory group (`groups[].max_severity`); callers resolve it (see
+`OsvCache.max_severity`) and pass it to `derive_severity(..., score=...)`. When
+no score is available (v1.x output, synthetic fixtures), the fallback computes a
+v3.0/v3.1 base score from a CVSS vector or reads a qualitative label.
 """
 
 from __future__ import annotations
@@ -84,7 +86,13 @@ def normalize_label(label: str) -> str | None:
     return s if s in SEVERITY_ORDER else None
 
 
-def derive_severity(advisory: dict) -> str:
+def derive_severity(advisory: dict, *, score: float | None = None) -> str:
+    # osv-scanner v2.x reports a precomputed numeric CVSS score per advisory
+    # group (groups[].max_severity); when the caller resolves it, use it directly.
+    if score is not None:
+        return band_for_score(score)
+    # Fallback for v1.x scanners (and synthetic fixtures): per-vuln CVSS vectors
+    # or a qualitative database_specific label.
     bands = []
     for entry in advisory.get("severity") or []:
         score = cvss_base_score(str(entry.get("score", "")))

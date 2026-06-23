@@ -116,10 +116,19 @@ min_severity = "high"      # global floor
 min_severity = "critical"  # stricter for one scope
 ```
 
-Severity comes from the advisory's CVSS v3 vector (or its qualitative label).
+Severity comes from the CVSS score `osv-scanner` reports for the advisory.
 Advisories with no severity data are bumped anyway (and the PR says so), so a
 serious-but-unscored CVE is never silently skipped. `gh-release-pin` scopes are
 freshness-driven and are not gated.
+
+## Suppression recovery
+
+`osv-scanner` hides advisories listed in `osv-scanner.toml`'s `IgnoredVulns`, so
+sentinel runs a second scan that bypasses that ignore list. If an advisory you
+suppressed (e.g. when no fix existed) now has a fix, sentinel opens a normal
+bump PR for it — and the `rust` scope's PR also strips the now-removable
+`osv-scanner.toml` / `deny.toml` entry. As with every sentinel PR, a human
+reviews it, so a deliberately-kept suppression can simply be declined.
 
 ## How sentinel differs from Dependabot
 

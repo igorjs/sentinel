@@ -55,7 +55,7 @@ def detect_module_drifts(workdir: Path, osv: OsvCache, gomod_path: Path) -> list
                     summary=adv.get("summary", adv["id"]),
                     fixed_versions=fixed,
                     current="",
-                    severity=derive_severity(adv),
+                    severity=derive_severity(adv, score=osv.max_severity(adv["id"])),
                     raw={"module": module, "advisory": adv},
                 )
             )
@@ -93,7 +93,7 @@ def detect_runtime_drift(workdir: Path, osv: OsvCache, gomod_path: Path) -> Drif
             continue
         fixable.append(best)
         advisory_ids.append(adv["id"])
-        severities.append(derive_severity(adv))
+        severities.append(derive_severity(adv, score=osv.max_severity(adv["id"])))
     if not fixable:
         return None
     target = max(fixable, key=version_key)

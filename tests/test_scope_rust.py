@@ -119,6 +119,59 @@ def test_run_acts_when_at_threshold(tmp_path):
     assert len(results) == 1
 
 
+def _osv_v2_groups(max_severity):
+    # osv-scanner v2.4.0 shape: severity lives only in package.groups[].max_severity,
+    # never in a per-vuln severity[] array.
+    return OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "crates.io", "name": "tokio"},
+                            "groups": [{"ids": ["RUSTSEC-2024-1"], "max_severity": max_severity}],
+                            "vulnerabilities": [
+                                {
+                                    "id": "RUSTSEC-2024-1",
+                                    "summary": "s",
+                                    "affected": [
+                                        {
+                                            "package": {"name": "tokio"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"introduced": "0"},
+                                                        {"fixed": "1.32.0"},
+                                                    ]
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+
+def test_detect_severity_from_v2_groups(tmp_path):
+    _cargo_lock(tmp_path)
+    drift = detect(tmp_path, _osv_v2_groups("9.8"))[0]
+    assert drift.severity == "critical"  # resolved from groups[].max_severity
+
+
+def test_run_skips_below_threshold_v2_groups(tmp_path, capsys):
+    _cargo_lock(tmp_path)
+    cfg = Config()
+    cfg.defaults.min_severity = "high"
+    results = run(tmp_path, cfg, _osv_v2_groups("3.7"), dry_run=True)  # low < high
+    assert results == []
+    assert "skipped 1" in capsys.readouterr().out
+
+
 def _osv_no_severity():
     # Advisory with no severity data → derive_severity → "unknown".
     return OsvCache(
