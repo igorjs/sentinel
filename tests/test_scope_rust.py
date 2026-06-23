@@ -117,3 +117,123 @@ def test_run_acts_when_at_threshold(tmp_path):
     cfg.defaults.min_severity = "high"
     results = run(tmp_path, cfg, osv, dry_run=True)
     assert len(results) == 1
+
+
+def _osv_no_severity():
+    # Advisory with no severity data → derive_severity → "unknown".
+    return OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "crates.io", "name": "tokio"},
+                            "vulnerabilities": [
+                                {
+                                    "id": "RUSTSEC-2024-2",
+                                    "summary": "s",
+                                    "affected": [
+                                        {
+                                            "package": {"name": "tokio"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"introduced": "0"},
+                                                        {"fixed": "1.32.0"},
+                                                    ]
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+
+def test_run_acts_on_unknown_severity_fail_open(tmp_path, capsys):
+    # Fail-open at the run layer: an unscored advisory is bumped even under a
+    # strict threshold, and is not counted as skipped.
+    _cargo_lock(tmp_path)
+    cfg = Config()
+    cfg.defaults.min_severity = "critical"
+    results = run(tmp_path, cfg, _osv_no_severity(), dry_run=True)
+    assert len(results) == 1
+    assert "skipped" not in capsys.readouterr().out
+
+
+def _osv_two_crates_one_advisory():
+    return OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "crates.io", "name": "crate-a"},
+                            "vulnerabilities": [
+                                {
+                                    "id": "RUSTSEC-2024-MULTI",
+                                    "summary": "s",
+                                    "affected": [
+                                        {
+                                            "package": {"name": "crate-a"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"introduced": "0"},
+                                                        {"fixed": "1.1.0"},
+                                                    ]
+                                                }
+                                            ],
+                                        },
+                                        {
+                                            "package": {"name": "crate-b"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"introduced": "0"},
+                                                        {"fixed": "2.2.0"},
+                                                    ]
+                                                }
+                                            ],
+                                        },
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+
+def test_run_dedups_suppression_cleanup_across_siblings(tmp_path, capsys):
+    # One advisory affecting two crates → two PRs, but only ONE strips the
+    # shared osv-scanner.toml suppression (no redundant/competing ignore edits).
+    (tmp_path / "Cargo.lock").write_text(
+        '[[package]]\nname = "crate-a"\nversion = "1.0.0"\n\n'
+        '[[package]]\nname = "crate-b"\nversion = "2.0.0"\n'
+    )
+    (tmp_path / "osv-scanner.toml").write_text(
+        '[[IgnoredVulns]]\nid = "RUSTSEC-2024-MULTI"\nreason = "x"\n'
+    )
+    drifts = detect(tmp_path, _osv_two_crates_one_advisory())
+    assert len(drifts) == 2  # both crates detected
+    run(tmp_path, Config(), _osv_two_crates_one_advisory(), dry_run=True)
+    out = capsys.readouterr().out
+    assert out.count("clean_osv-scanner.toml") == 1
+
+
+def test_plan_clean_suppressions_false_skips_cleanup(tmp_path):
+    (tmp_path / "Cargo.lock").write_text('[[package]]\nname = "crate-a"\nversion = "1.0.0"\n')
+    (tmp_path / "osv-scanner.toml").write_text(
+        '[[IgnoredVulns]]\nid = "RUSTSEC-2024-MULTI"\nreason = "x"\n'
+    )
+    drift = detect(tmp_path, _osv_two_crates_one_advisory())[0]
+    assert plan(tmp_path, drift, clean_suppressions=True).post_steps  # default cleans
+    assert plan(tmp_path, drift, clean_suppressions=False).post_steps == ()
