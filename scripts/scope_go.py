@@ -6,7 +6,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from scripts.config import Config
+from scripts.config import Config, effective_min_severity
 from scripts.osv import OsvCache
 from scripts.pr import (
     apply_plan,
@@ -15,6 +15,7 @@ from scripts.pr import (
     open_issue_fallback,
     open_unsafe_identifier_issue,
 )
+from scripts.severity import SEVERITY_ORDER, derive_severity, gate, meets_threshold, severity_line
 from scripts.types import Drift, Plan, Result
 from scripts.validate import UnsafeIdentifier, ensure_safe
 from scripts.version import version_key
@@ -54,6 +55,7 @@ def detect_module_drifts(workdir: Path, osv: OsvCache, gomod_path: Path) -> list
                     summary=adv.get("summary", adv["id"]),
                     fixed_versions=fixed,
                     current="",
+                    severity=derive_severity(adv),
                     raw={"module": module, "advisory": adv},
                 )
             )
@@ -68,6 +70,7 @@ def detect_runtime_drift(workdir: Path, osv: OsvCache, gomod_path: Path) -> Drif
         return None
     fixable: list[str] = []
     advisory_ids: list[str] = []
+    severities: list[str] = []
     for adv in osv.fixable_advisories("Go"):
         is_stdlib = any(
             a.get("package", {}).get("name") == "stdlib" for a in adv.get("affected", [])
@@ -90,15 +93,19 @@ def detect_runtime_drift(workdir: Path, osv: OsvCache, gomod_path: Path) -> Drif
             continue
         fixable.append(best)
         advisory_ids.append(adv["id"])
+        severities.append(derive_severity(adv))
     if not fixable:
         return None
     target = max(fixable, key=version_key)
+    known = [s for s in severities if s in SEVERITY_ORDER]
+    runtime_severity = max(known, key=SEVERITY_ORDER.index) if known else "unknown"
     return Drift(
         scope=SCOPE,
         key="runtime-" + "-".join(sorted(advisory_ids))[:50],
         summary=f"Clear {len(advisory_ids)} Go stdlib advisor(ies)",
         fixed_versions=[target],
         current=current,
+        severity=runtime_severity,
         raw={"advisory_ids": advisory_ids, "target": target},
     )
 
@@ -111,6 +118,7 @@ def plan_module(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
     body = (
         f"Closes [{drift.key}](https://osv.dev/{drift.key}).\n\n"
         f"**Advisory:** {drift.summary}\n\n"
+        f"{severity_line(drift.severity)}\n\n"
         f"**Bump:** `{module}` → {fix}\n\n"
         f"Opened automatically by [sentinel]"
         f"(https://github.com/igorjs/sentinel).\n"
@@ -177,8 +185,12 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
 
     results: list[Result] = []
     base_sha = capture_base_sha(workdir) if not dry_run else ""
+    threshold = effective_min_severity(config, SCOPE)
 
-    for drift in detect_module_drifts(workdir, osv, gomod_path):
+    module_drifts, skipped = gate(detect_module_drifts(workdir, osv, gomod_path), threshold)
+    if skipped:
+        print(f"[{SCOPE}] skipped {skipped} advisor(ies) below min_severity={threshold}")
+    for drift in module_drifts:
         try:
             p = plan_module(workdir, drift, gomod_path)
         except UnsafeIdentifier as e:
@@ -211,6 +223,9 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
             )
 
     runtime_drift = detect_runtime_drift(workdir, osv, gomod_path)
+    if runtime_drift and not meets_threshold(runtime_drift.severity, threshold):
+        print(f"[{SCOPE}] skipped runtime bump below min_severity={threshold}")
+        runtime_drift = None
     if runtime_drift:
         if update_runtime:
             p = plan_runtime(workdir, runtime_drift, gomod_path)

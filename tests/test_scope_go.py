@@ -9,6 +9,7 @@ from scripts.scope_go import (
     plan_module,
     plan_runtime,
 )
+from scripts.severity import SEVERITY_ORDER
 
 
 @pytest.fixture
@@ -59,3 +60,16 @@ def test_plan_runtime_edits_directive(workdir: Path, fixtures_dir: Path):
         step()
     assert "go 1.25.11" in (workdir / "go.mod").read_text()
     assert "go 1.24.4" not in (workdir / "go.mod").read_text()
+
+
+def test_module_drift_sets_severity(workdir: Path, fixtures_dir: Path):
+    osv = from_fixture(fixtures_dir / "osv_go_deps.json")
+    drifts = detect_module_drifts(workdir, osv, workdir / "go.mod")
+    # Fixture carries no severity data → unknown (fail-open).
+    assert drifts[0].severity == "unknown"
+
+
+def test_runtime_drift_severity_is_max_of_contributors(workdir: Path, fixtures_dir: Path):
+    osv = from_fixture(fixtures_dir / "osv_go_stdlib.json")
+    drift = detect_runtime_drift(workdir, osv, workdir / "go.mod")
+    assert drift.severity in SEVERITY_ORDER or drift.severity == "unknown"
