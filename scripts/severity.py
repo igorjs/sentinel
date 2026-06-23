@@ -71,3 +71,28 @@ def band_for_score(score: float) -> str:
     if score < 9.0:
         return "high"
     return "critical"
+
+
+_LABEL_ALIASES = {"moderate": "medium"}
+
+
+def normalize_label(label: str) -> str | None:
+    s = label.strip().lower()
+    s = _LABEL_ALIASES.get(s, s)
+    return s if s in SEVERITY_ORDER else None
+
+
+def derive_severity(advisory: dict) -> str:
+    bands = []
+    for entry in advisory.get("severity") or []:
+        score = cvss_base_score(str(entry.get("score", "")))
+        if score is not None:
+            bands.append(band_for_score(score))
+    if bands:
+        return max(bands, key=SEVERITY_ORDER.index)
+    label = (advisory.get("database_specific") or {}).get("severity")
+    if label:
+        norm = normalize_label(str(label))
+        if norm:
+            return norm
+    return "unknown"
