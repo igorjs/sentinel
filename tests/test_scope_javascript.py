@@ -2,8 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from scripts.osv import from_fixture
-from scripts.scope_javascript import detect, detect_pkg_manager, plan
+from scripts.config import Config
+from scripts.osv import OsvCache, from_fixture
+from scripts.scope_javascript import detect, detect_pkg_manager, plan, run
 
 
 @pytest.fixture
@@ -62,3 +63,49 @@ def test_plan_yarn_command(workdir: Path, fixtures_dir: Path):
     drift = detect(workdir, osv)[0]
     p = plan(workdir, drift, "yarn")
     assert ["yarn", "upgrade", "lodash@4.17.21"] in p.commands
+
+
+def _osv_lodash(vector):
+    return OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "npm", "name": "lodash"},
+                            "vulnerabilities": [
+                                {
+                                    "id": "GHSA-1",
+                                    "summary": "s",
+                                    "severity": [{"type": "CVSS_V3", "score": vector}],
+                                    "affected": [
+                                        {
+                                            "package": {"name": "lodash"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"introduced": "0"},
+                                                        {"fixed": "4.17.21"},
+                                                    ]
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+
+def test_run_skips_below_threshold(workdir, capsys):
+    (workdir / "package-lock.json").write_text("{}")
+    osv = _osv_lodash("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L")  # 3.7 low
+    cfg = Config()
+    cfg.defaults.min_severity = "critical"
+    results = run(workdir, cfg, osv, dry_run=True)
+    assert results == []
+    assert "skipped 1" in capsys.readouterr().out
