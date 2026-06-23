@@ -42,3 +42,33 @@ def test_custom_missing_required_kind_raises(tmp_path: Path):
     p.write_text('[[custom]]\nname = "x"\n')
     with pytest.raises(ConfigError, match=r"missing.*kind"):
         load_config(p)
+
+
+def test_gh_release_pin_missing_extra_key_raises_at_load(tmp_path: Path):
+    p = tmp_path / "bad.toml"
+    # Missing env_var (and others) for a gh-release-pin custom scope.
+    p.write_text(
+        "[[custom]]\n"
+        'name = "libkrun"\n'
+        'kind = "gh-release-pin"\n'
+        'upstream_repo = "a/b"\n'
+        'target_file = ".github/workflows/x.yml"\n'
+        'target_kind = "yaml-env-var"\n'
+    )
+    with pytest.raises(ConfigError, match="env_var"):
+        load_config(p)
+
+
+def test_gh_release_pin_complete_extra_loads(tmp_path: Path):
+    p = tmp_path / "ok.toml"
+    p.write_text(
+        "[[custom]]\n"
+        'name = "libkrun"\n'
+        'kind = "gh-release-pin"\n'
+        'upstream_repo = "a/b"\n'
+        'target_file = ".github/workflows/x.yml"\n'
+        'target_kind = "yaml-env-var"\n'
+        'env_var = "LIBKRUN_VERSION"\n'
+    )
+    cfg = load_config(p)
+    assert cfg.custom[0].extra["env_var"] == "LIBKRUN_VERSION"

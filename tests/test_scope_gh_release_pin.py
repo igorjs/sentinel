@@ -1,10 +1,12 @@
 # tests/test_scope_gh_release_pin.py
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from scripts.config import CustomScope
-from scripts.scope_gh_release_pin import detect, plan
+from scripts import scope_gh_release_pin
+from scripts.config import Config, CustomScope
+from scripts.scope_gh_release_pin import detect, plan, run
 
 
 @pytest.fixture
@@ -46,3 +48,19 @@ def test_plan_edits_workflow_file(workflow, custom, tmp_path):
     for step in p.post_steps:
         step()
     assert "0.19.0" in workflow.read_text()
+
+
+def test_detect_ignores_build_metadata_as_newer(workflow, custom, tmp_path):
+    # Same release with +build metadata must not be treated as a newer version.
+    assert detect(tmp_path, custom, latest_resolver=lambda repo: "v0.18.1+build.9") == []
+
+
+def test_run_routes_upstream_failure_to_issue(workflow, custom, tmp_path, monkeypatch):
+    def _boom(repo):
+        raise subprocess.CalledProcessError(1, ["gh", "api"])
+
+    monkeypatch.setattr(scope_gh_release_pin, "_gh_latest", _boom)
+    results = run(tmp_path, Config(custom=[custom]), None, dry_run=True)
+    assert len(results) == 1
+    assert results[0].kind == "noop"
+    assert "upstream lookup failed" in results[0].summary

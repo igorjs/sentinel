@@ -8,8 +8,16 @@ from pathlib import Path
 
 from scripts.config import Config
 from scripts.osv import OsvCache
-from scripts.pr import apply_plan, capture_base_sha, open_issue_fallback
+from scripts.pr import (
+    apply_plan,
+    branch_name,
+    capture_base_sha,
+    open_issue_fallback,
+    open_unsafe_identifier_issue,
+)
 from scripts.types import Drift, Plan, Result
+from scripts.validate import UnsafeIdentifier, ensure_safe
+from scripts.version import version_key
 
 SCOPE = "go"
 
@@ -35,7 +43,7 @@ def detect_module_drifts(workdir: Path, osv: OsvCache, gomod_path: Path) -> list
                     for e in r.get("events", [])
                     if "fixed" in e
                 },
-                key=_parse,
+                key=version_key,
             )
             if not fixed:
                 continue
@@ -75,16 +83,16 @@ def detect_runtime_drift(workdir: Path, osv: OsvCache, gomod_path: Path) -> Drif
                 for e in r.get("events", [])
                 if "fixed" in e
             },
-            key=_parse,
+            key=version_key,
         )
-        best = next((v for v in candidates if _ge(v, current)), None)
+        best = next((v for v in candidates if version_key(v) >= version_key(current)), None)
         if best is None:
             continue
         fixable.append(best)
         advisory_ids.append(adv["id"])
     if not fixable:
         return None
-    target = max(fixable, key=_parse)
+    target = max(fixable, key=version_key)
     return Drift(
         scope=SCOPE,
         key="runtime-" + "-".join(sorted(advisory_ids))[:50],
@@ -98,6 +106,7 @@ def detect_runtime_drift(workdir: Path, osv: OsvCache, gomod_path: Path) -> Drif
 def plan_module(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
     module = drift.raw["module"]
     fix = drift.fixed_versions[0]
+    ensure_safe(module, fix)
     title = f"{drift.key}: bump {module} to {fix}"
     body = (
         f"Closes [{drift.key}](https://osv.dev/{drift.key}).\n\n"
@@ -109,7 +118,7 @@ def plan_module(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
     return Plan(
         scope=SCOPE,
         key=drift.key,
-        branch=f"sentinel/go/{drift.key.lower()}",
+        branch=branch_name(SCOPE, f"{drift.key} {module}"),
         title=title,
         body=body,
         files_changed=[
@@ -170,7 +179,15 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
     base_sha = capture_base_sha(workdir) if not dry_run else ""
 
     for drift in detect_module_drifts(workdir, osv, gomod_path):
-        p = plan_module(workdir, drift, gomod_path)
+        try:
+            p = plan_module(workdir, drift, gomod_path)
+        except UnsafeIdentifier as e:
+            results.append(
+                open_unsafe_identifier_issue(
+                    scope=SCOPE, key=drift.key, error=e, dry_run=dry_run, workdir=workdir
+                )
+            )
+            continue
         try:
             results.append(
                 apply_plan(
@@ -178,6 +195,7 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     dry_run=dry_run,
                     workdir=workdir,
                     base_sha=base_sha,
+                    pr_labels=config.defaults.pr_labels,
                 )
             )
         except subprocess.CalledProcessError as e:
@@ -202,6 +220,7 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     dry_run=dry_run,
                     workdir=workdir,
                     base_sha=base_sha,
+                    pr_labels=config.defaults.pr_labels,
                 )
             )
         else:
@@ -231,11 +250,3 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
 def _current_directive(text: str) -> str | None:
     m = re.search(r"^go\s+(\S+)\s*$", text, re.MULTILINE)
     return m.group(1) if m else None
-
-
-def _ge(a: str, b: str) -> bool:
-    return _parse(a) >= _parse(b)
-
-
-def _parse(v: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in re.findall(r"\d+", v))

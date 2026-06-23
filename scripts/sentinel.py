@@ -98,7 +98,7 @@ def _run_scope(workdir: Path, config: Config, scope: str, *, dry_run: bool) -> i
         if custom.kind == "gh-release-pin":
             results = scope_gh_release_pin.run(
                 workdir,
-                Config(custom=[custom]),
+                Config(custom=[custom], defaults=config.defaults),
                 OsvCache({"results": []}),
                 dry_run=dry_run,
             )

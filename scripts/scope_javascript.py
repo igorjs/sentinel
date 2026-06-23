@@ -3,14 +3,21 @@ Detects lockfile to pick npm/pnpm/yarn. No lockfile → issue fallback."""
 
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
 
 from scripts.config import Config
 from scripts.osv import OsvCache
-from scripts.pr import apply_plan, capture_base_sha, open_issue_fallback
+from scripts.pr import (
+    apply_plan,
+    branch_name,
+    capture_base_sha,
+    open_issue_fallback,
+    open_unsafe_identifier_issue,
+)
 from scripts.types import Drift, Plan, Result
+from scripts.validate import UnsafeIdentifier, ensure_safe
+from scripts.version import version_key
 
 SCOPE = "javascript"
 
@@ -55,7 +62,7 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
                     for e in r.get("events", [])
                     if "fixed" in e
                 },
-                key=_parse,
+                key=version_key,
             )
             if not fixed:
                 continue
@@ -75,6 +82,7 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
 def plan(workdir: Path, drift: Drift, pkg_manager: str) -> Plan:
     module = drift.raw["module"]
     fix = drift.fixed_versions[0]
+    ensure_safe(module, fix)
     title = f"{drift.key}: bump {module} to {fix}"
     body = (
         f"Closes [{drift.key}](https://osv.dev/{drift.key}).\n\n"
@@ -87,7 +95,7 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str) -> Plan:
     return Plan(
         scope=SCOPE,
         key=drift.key,
-        branch=f"sentinel/javascript/{drift.key.lower()}",
+        branch=branch_name(SCOPE, f"{drift.key} {module}"),
         title=title,
         body=body,
         files_changed=["package.json", lockfiles[pkg_manager]],
@@ -123,7 +131,15 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
     results: list[Result] = []
     base_sha = capture_base_sha(workdir) if not dry_run else ""
     for drift in detect(workdir, osv):
-        p = plan(workdir, drift, pm)
+        try:
+            p = plan(workdir, drift, pm)
+        except UnsafeIdentifier as e:
+            results.append(
+                open_unsafe_identifier_issue(
+                    scope=SCOPE, key=drift.key, error=e, dry_run=dry_run, workdir=workdir
+                )
+            )
+            continue
         try:
             results.append(
                 apply_plan(
@@ -131,6 +147,7 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     dry_run=dry_run,
                     workdir=workdir,
                     base_sha=base_sha,
+                    pr_labels=config.defaults.pr_labels,
                 )
             )
         except subprocess.CalledProcessError as e:
@@ -145,7 +162,3 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                 )
             )
     return results
-
-
-def _parse(v: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in re.findall(r"\d+", v))

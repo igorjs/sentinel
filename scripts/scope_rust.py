@@ -9,8 +9,16 @@ from pathlib import Path
 
 from scripts.config import Config
 from scripts.osv import OsvCache
-from scripts.pr import apply_plan, capture_base_sha, open_issue_fallback
+from scripts.pr import (
+    apply_plan,
+    branch_name,
+    capture_base_sha,
+    open_issue_fallback,
+    open_unsafe_identifier_issue,
+)
 from scripts.types import Drift, Plan, Result
+from scripts.validate import UnsafeIdentifier, ensure_safe
+from scripts.version import version_key
 
 SCOPE = "rust"
 
@@ -20,16 +28,16 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
         return []
     lock = (workdir / "Cargo.lock").read_text()
     drifts: list[Drift] = []
-    seen: set[str] = set()
+    seen: set[tuple[str, str]] = set()
     for adv in osv.fixable_advisories("crates.io"):
         adv_id = adv["id"]
-        if adv_id in seen:
-            continue
-        seen.add(adv_id)
         for affected in adv.get("affected", []):
             pkg_name = affected.get("package", {}).get("name")
             if not pkg_name:
                 continue
+            if (adv_id, pkg_name) in seen:
+                continue
+            seen.add((adv_id, pkg_name))
             current = _current_version(lock, pkg_name)
             if current is None:
                 continue
@@ -40,7 +48,7 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
                     for e in r.get("events", [])
                     if "fixed" in e
                 },
-                key=_parse,
+                key=version_key,
             )
             if not fixed:
                 continue
@@ -54,19 +62,19 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
                     raw={"package": pkg_name, "advisory": adv},
                 )
             )
-            break
     return drifts
 
 
 def plan(workdir: Path, drift: Drift) -> Plan:
     pkg = drift.raw["package"]
     fix = _minimum_acceptable_fix(drift.fixed_versions, drift.current)
+    ensure_safe(pkg, fix)
     title = f"{drift.key}: bump {pkg} to {fix}"
     body = _pr_body(drift, fix)
     return Plan(
         scope=SCOPE,
         key=drift.key,
-        branch=f"sentinel/rust/{drift.key.lower()}",
+        branch=branch_name(SCOPE, f"{drift.key} {pkg}"),
         title=title,
         body=body,
         files_changed=["Cargo.lock", "osv-scanner.toml", "deny.toml"],
@@ -79,7 +87,15 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
     results: list[Result] = []
     base_sha = capture_base_sha(workdir) if not dry_run else ""
     for drift in detect(workdir, osv):
-        p = plan(workdir, drift)
+        try:
+            p = plan(workdir, drift)
+        except UnsafeIdentifier as e:
+            results.append(
+                open_unsafe_identifier_issue(
+                    scope=SCOPE, key=drift.key, error=e, dry_run=dry_run, workdir=workdir
+                )
+            )
+            continue
         try:
             results.append(
                 apply_plan(
@@ -87,6 +103,7 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     dry_run=dry_run,
                     workdir=workdir,
                     base_sha=base_sha,
+                    pr_labels=config.defaults.pr_labels,
                 )
             )
         except subprocess.CalledProcessError as e:
@@ -120,17 +137,9 @@ def _current_version(lock_text: str, pkg: str) -> str | None:
 
 def _minimum_acceptable_fix(fixed_versions: list[str], current: str) -> str:
     for v in fixed_versions:
-        if _semver_ge(v, current):
+        if version_key(v) >= version_key(current):
             return v
     return fixed_versions[-1]
-
-
-def _semver_ge(a: str, b: str) -> bool:
-    return _parse(a) >= _parse(b)
-
-
-def _parse(v: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in re.findall(r"\d+", v))
 
 
 def _pr_body(drift: Drift, fix: str) -> str:

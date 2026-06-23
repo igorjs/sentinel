@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
 from scripts.config import Config, CustomScope
 from scripts.osv import OsvCache
-from scripts.pr import apply_plan, capture_base_sha
+from scripts.pr import apply_plan, capture_base_sha, open_issue_fallback
 from scripts.target_yaml_env_var import read_value, write_value
 from scripts.types import Drift, Plan, Result
+from scripts.version import version_key
 
 SCOPE = "gh-release-pin"
 
@@ -30,8 +30,10 @@ def detect(
     workdir: Path,
     custom: CustomScope,
     *,
-    latest_resolver: Callable[[str], str] = _gh_latest,
+    latest_resolver: Callable[[str], str] | None = None,
 ) -> list[Drift]:
+    # Resolve at call time (not as a default arg) so run() and tests can swap it.
+    resolve = latest_resolver or _gh_latest
     upstream_repo = custom.extra["upstream_repo"]
     target_file = workdir / custom.extra["target_file"]
     if not target_file.exists():
@@ -44,10 +46,10 @@ def detect(
     current = read_value(target_file, env_var, env_path=env_path)
     if current is None:
         return []
-    latest = _strip_v(latest_resolver(upstream_repo))
-    if _semver_eq(current, latest):
+    latest = _strip_v(resolve(upstream_repo))
+    if version_key(current) == version_key(latest):
         return []
-    if not _semver_gt(latest, current):
+    if not version_key(latest) > version_key(current):
         return []
     return [
         Drift(
@@ -98,30 +100,52 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
     for custom in config.custom:
         if custom.kind != SCOPE:
             continue
-        for drift in detect(workdir, custom):
-            p = plan(workdir, drift, custom)
+        try:
+            drifts = detect(workdir, custom)
+        except subprocess.CalledProcessError as e:
             results.append(
-                apply_plan(
-                    p,
+                open_issue_fallback(
+                    scope=SCOPE,
+                    key=custom.name,
+                    title=f"sentinel: {custom.name} upstream lookup failed",
+                    body=(
+                        f"Could not resolve the latest release for "
+                        f"`{custom.extra.get('upstream_repo', '?')}` (exit {e.returncode}). "
+                        "Manual review needed."
+                    ),
                     dry_run=dry_run,
                     workdir=workdir,
-                    base_sha=base_sha,
                 )
             )
+            continue
+        for drift in drifts:
+            try:
+                p = plan(workdir, drift, custom)
+                results.append(
+                    apply_plan(
+                        p,
+                        dry_run=dry_run,
+                        workdir=workdir,
+                        base_sha=base_sha,
+                        pr_labels=config.defaults.pr_labels,
+                    )
+                )
+            except (subprocess.CalledProcessError, KeyError) as e:
+                results.append(
+                    open_issue_fallback(
+                        scope=SCOPE,
+                        key=drift.key,
+                        title=f"sentinel: {custom.name} pin bump blocked",
+                        body=(
+                            f"Bumping `{custom.name}` to `{drift.fixed_versions[0]}` failed: "
+                            f"{e}. Manual review needed."
+                        ),
+                        dry_run=dry_run,
+                        workdir=workdir,
+                    )
+                )
     return results
 
 
 def _strip_v(tag: str) -> str:
     return tag[1:] if tag.startswith("v") else tag
-
-
-def _semver_eq(a: str, b: str) -> bool:
-    return _parse(a) == _parse(b)
-
-
-def _semver_gt(a: str, b: str) -> bool:
-    return _parse(a) > _parse(b)
-
-
-def _parse(v: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in re.findall(r"\d+", v))

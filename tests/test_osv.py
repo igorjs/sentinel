@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from scripts.osv import from_fixture
+import pytest
+
+from scripts import osv as osv_mod
+from scripts.osv import OsvCache, from_fixture
 
 
 def test_empty_fixture_no_advisories(fixtures_dir: Path):
@@ -26,3 +29,12 @@ def test_filter_by_package(fixtures_dir: Path):
     cache = from_fixture(fixtures_dir / "osv_cargo_fixable.json")
     assert len(cache.advisories("crates.io", package="tokio")) == 1
     assert cache.advisories("crates.io", package="other") == []
+
+
+def test_scan_missing_binary_raises_clear_error(tmp_path: Path, monkeypatch):
+    def _raise(*args, **kwargs):
+        raise FileNotFoundError(2, "No such file or directory", "osv-scanner")
+
+    monkeypatch.setattr(osv_mod.subprocess, "run", _raise)
+    with pytest.raises(RuntimeError, match="osv-scanner not found"):
+        OsvCache.scan(tmp_path)
