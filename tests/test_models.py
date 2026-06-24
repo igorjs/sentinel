@@ -1,4 +1,4 @@
-from scripts.types import Drift, Plan, Result
+from scripts.models import Drift, Plan, Result
 
 
 def test_drift_is_hashable():
@@ -26,14 +26,14 @@ def test_result_kind_constrained():
 
 
 def test_drift_defaults_severity_unknown():
-    from scripts.types import Drift
+    from scripts.models import Drift
 
     d = Drift(scope="rust", key="K", summary="s", fixed_versions=["1.0.0"], current="0.9.0")
     assert d.severity == "unknown"
 
 
 def test_drift_severity_settable_and_not_in_hash():
-    from scripts.types import Drift
+    from scripts.models import Drift
 
     a = Drift(scope="rust", key="K", summary="s", fixed_versions=[], current="", severity="high")
     b = Drift(scope="rust", key="K", summary="s", fixed_versions=[], current="", severity="low")

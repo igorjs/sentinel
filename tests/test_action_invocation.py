@@ -18,6 +18,19 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _ACTION = _PROJECT_ROOT / "action.yml"
 _DISCOVER_ACTION = _PROJECT_ROOT / "discover" / "action.yml"
+_SCRIPTS = _PROJECT_ROOT / "scripts"
+
+
+def test_no_script_shadows_a_stdlib_module():
+    # A file-path invocation puts scripts/ on sys.path[0]; any scripts/<name>.py
+    # whose stem matches a stdlib top-level module (e.g. types.py) is then
+    # imported instead of the stdlib one, breaking the interpreter. Keep scripts/
+    # clear of such names so the footgun can't reappear.
+    offenders = sorted(p.stem for p in _SCRIPTS.glob("*.py") if p.stem in sys.stdlib_module_names)
+    assert offenders == [], (
+        f"scripts/ files shadow stdlib modules {offenders}; rename them "
+        "(e.g. types.py -> models.py)."
+    )
 
 
 def test_run_action_invokes_cli_as_module():

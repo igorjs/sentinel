@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from scripts.config import Config, effective_min_severity
+from scripts.models import Drift, Plan, Result
 from scripts.osv import OsvCache
 from scripts.pr import (
     apply_plan,
@@ -18,7 +19,6 @@ from scripts.pr import (
 )
 from scripts.severity import derive_severity, gate, severity_line
 from scripts.suppression import osv_scanner_cleanup_step
-from scripts.types import Drift, Plan, Result
 from scripts.validate import UnsafeIdentifier, ensure_safe
 from scripts.version import version_key
 

@@ -3,8 +3,8 @@ import subprocess
 import pytest
 
 from scripts import pr as pr_mod
+from scripts.models import Plan
 from scripts.pr import assert_pushable, branch_name
-from scripts.types import Plan
 
 
 def test_branch_name_basic():

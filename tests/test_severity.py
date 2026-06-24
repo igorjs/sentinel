@@ -1,5 +1,6 @@
 import pytest
 
+from scripts.models import Drift
 from scripts.severity import (
     SEVERITY_ORDER,
     band_for_score,
@@ -10,7 +11,6 @@ from scripts.severity import (
     normalize_label,
     severity_line,
 )
-from scripts.types import Drift
 
 
 @pytest.mark.parametrize(

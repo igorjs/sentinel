@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts.models import Drift
 from scripts.osv import OsvCache, from_fixture
 from scripts.scope_go import (
     detect_module_drifts,
@@ -9,7 +10,6 @@ from scripts.scope_go import (
     plan_module,
     plan_runtime,
 )
-from scripts.types import Drift
 
 
 @pytest.fixture
