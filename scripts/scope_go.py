@@ -16,6 +16,7 @@ from scripts.pr import (
     open_unsafe_identifier_issue,
 )
 from scripts.severity import SEVERITY_ORDER, derive_severity, gate, meets_threshold, severity_line
+from scripts.suppression import osv_scanner_cleanup_step
 from scripts.types import Drift, Plan, Result
 from scripts.validate import UnsafeIdentifier, ensure_safe
 from scripts.version import version_key
@@ -110,10 +111,13 @@ def detect_runtime_drift(workdir: Path, osv: OsvCache, gomod_path: Path) -> Drif
     )
 
 
-def plan_module(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
+def plan_module(
+    workdir: Path, drift: Drift, gomod_path: Path, *, clean_suppressions: bool = True
+) -> Plan:
     module = drift.raw["module"]
     fix = drift.fixed_versions[0]
     ensure_safe(module, fix)
+    cleanup = osv_scanner_cleanup_step(workdir, drift.key) if clean_suppressions else None
     title = f"{drift.key}: bump {module} to {fix}"
     body = (
         f"Closes [{drift.key}](https://osv.dev/{drift.key}).\n\n"
@@ -137,6 +141,7 @@ def plan_module(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
             ["go", "get", f"{module}@{fix}"],
             ["go", "mod", "tidy"],
         ],
+        post_steps=(cleanup,) if cleanup else (),
     )
 
 
@@ -190,9 +195,11 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
     module_drifts, skipped = gate(detect_module_drifts(workdir, osv, gomod_path), threshold)
     if skipped:
         print(f"[{SCOPE}] skipped {skipped} advisor(ies) below min_severity={threshold}")
+    cleaned: set[str] = set()  # advisories whose suppression cleanup is already claimed
     for drift in module_drifts:
+        clean = drift.key not in cleaned
         try:
-            p = plan_module(workdir, drift, gomod_path)
+            p = plan_module(workdir, drift, gomod_path, clean_suppressions=clean)
         except UnsafeIdentifier as e:
             results.append(
                 open_unsafe_identifier_issue(
@@ -200,6 +207,8 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                 )
             )
             continue
+        if clean:
+            cleaned.add(drift.key)
         try:
             results.append(
                 apply_plan(

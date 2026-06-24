@@ -16,6 +16,7 @@ from scripts.pr import (
     open_unsafe_identifier_issue,
 )
 from scripts.severity import derive_severity, gate, severity_line
+from scripts.suppression import osv_scanner_cleanup_step
 from scripts.types import Drift, Plan, Result
 from scripts.validate import UnsafeIdentifier, ensure_safe
 from scripts.version import version_key
@@ -81,10 +82,11 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
     return drifts
 
 
-def plan(workdir: Path, drift: Drift, pkg_manager: str) -> Plan:
+def plan(workdir: Path, drift: Drift, pkg_manager: str, *, clean_suppressions: bool = True) -> Plan:
     module = drift.raw["module"]
     fix = drift.fixed_versions[0]
     ensure_safe(module, fix)
+    cleanup = osv_scanner_cleanup_step(workdir, drift.key) if clean_suppressions else None
     title = f"{drift.key}: bump {module} to {fix}"
     body = (
         f"Closes [{drift.key}](https://osv.dev/{drift.key}).\n\n"
@@ -103,6 +105,7 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str) -> Plan:
         body=body,
         files_changed=["package.json", lockfiles[pkg_manager]],
         commands=[_BUMP_CMD[pkg_manager](module, fix)],
+        post_steps=(cleanup,) if cleanup else (),
     )
 
 
@@ -137,9 +140,11 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
     detected, skipped = gate(detect(workdir, osv), threshold)
     if skipped:
         print(f"[{SCOPE}] skipped {skipped} advisor(ies) below min_severity={threshold}")
+    cleaned: set[str] = set()  # advisories whose suppression cleanup is already claimed
     for drift in detected:
+        clean = drift.key not in cleaned
         try:
-            p = plan(workdir, drift, pm)
+            p = plan(workdir, drift, pm, clean_suppressions=clean)
         except UnsafeIdentifier as e:
             results.append(
                 open_unsafe_identifier_issue(
@@ -147,6 +152,8 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                 )
             )
             continue
+        if clean:
+            cleaned.add(drift.key)
         try:
             results.append(
                 apply_plan(

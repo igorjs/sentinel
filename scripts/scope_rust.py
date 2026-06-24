@@ -17,6 +17,7 @@ from scripts.pr import (
     open_unsafe_identifier_issue,
 )
 from scripts.severity import derive_severity, gate, severity_line
+from scripts.suppression import osv_scanner_cleanup_step
 from scripts.types import Drift, Plan, Result
 from scripts.validate import UnsafeIdentifier, ensure_safe
 from scripts.version import version_key
@@ -170,33 +171,21 @@ def _pr_body(drift: Drift, fix: str) -> str:
 
 
 def _self_cleaning_steps(workdir: Path, advisory_id: str) -> list:
+    # osv-scanner.toml cleanup is shared across scopes; deny.toml is cargo-deny
+    # specific and stays here.
     steps = []
-    for filename, remover in [
-        ("osv-scanner.toml", _remove_from_osv_scanner_toml),
-        ("deny.toml", _remove_from_deny_toml),
-    ]:
-        path = workdir / filename
-        if path.exists() and advisory_id in path.read_text():
+    osv_step = osv_scanner_cleanup_step(workdir, advisory_id)
+    if osv_step:
+        steps.append(osv_step)
+    deny_path = workdir / "deny.toml"
+    if deny_path.exists() and advisory_id in deny_path.read_text():
 
-            def make_step(p: Path, fn) -> callable:
-                def step() -> None:
-                    fn(p, advisory_id)
+        def step() -> None:
+            _remove_from_deny_toml(deny_path, advisory_id)
 
-                step.__name__ = f"clean_{p.name}"
-                return step
-
-            steps.append(make_step(path, remover))
+        step.__name__ = "clean_deny.toml"
+        steps.append(step)
     return steps
-
-
-def _remove_from_osv_scanner_toml(path: Path, advisory_id: str) -> None:
-    text = path.read_text()
-    pattern = re.compile(
-        r"(?ms)^\[\[IgnoredVulns\]\]\s*\n"
-        rf'.*?id\s*=\s*"{re.escape(advisory_id)}".*?(?=\n\[\[|\Z)'
-    )
-    new_text = pattern.sub("", text).rstrip() + "\n"
-    path.write_text(new_text)
 
 
 def _remove_from_deny_toml(path: Path, advisory_id: str) -> None:

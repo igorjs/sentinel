@@ -9,6 +9,7 @@ from scripts.scope_go import (
     plan_module,
     plan_runtime,
 )
+from scripts.types import Drift
 
 
 @pytest.fixture
@@ -114,3 +115,19 @@ def test_runtime_drift_severity_is_max_of_contributors(workdir: Path):
     assert drift is not None
     assert drift.severity == "high"  # max(low, high)
     assert drift.raw["target"] == "1.25.0"  # max fixed version
+
+
+def test_plan_module_cleans_osv_scanner_toml(workdir: Path):
+    (workdir / "osv-scanner.toml").write_text('[[IgnoredVulns]]\nid = "GO-X"\n')
+    drift = Drift(
+        scope="go",
+        key="GO-X",
+        summary="s",
+        fixed_versions=["1.2.3"],
+        current="",
+        raw={"module": "example.com/m"},
+    )
+    p = plan_module(workdir, drift, workdir / "go.mod")
+    for step in p.post_steps:
+        step()
+    assert "GO-X" not in (workdir / "osv-scanner.toml").read_text()
