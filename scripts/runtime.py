@@ -132,6 +132,61 @@ def write_tool_versions(*tools: str) -> Callable[[Path, str], None]:
     return _write
 
 
+MISE_FILES = ("mise.toml", ".mise.toml", ".config/mise/config.toml")
+
+
+def _mise_primary_version(value) -> str | None:
+    """Primary version string from a mise [tools] value (string / array / table)."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return value[0] if value and isinstance(value[0], str) else None
+    if isinstance(value, dict):
+        v = value.get("version")
+        return v if isinstance(v, str) else None
+    return None
+
+
+def read_mise_tool(file: str, tool: str) -> Callable[[Path], str | None]:
+    def _read(workdir: Path) -> str | None:
+        path = workdir / file
+        if not path.exists():
+            return None
+        import tomllib
+
+        data = tomllib.loads(path.read_text())
+        tools = data.get("tools")
+        if not isinstance(tools, dict):
+            return None
+        return _mise_primary_version(tools.get(tool))
+
+    return _read
+
+
+def write_mise_tool(file: str, tool: str) -> Callable[[Path, str], None]:
+    def _write(workdir: Path, new_value: str) -> None:
+        import tomlkit
+
+        path = workdir / file
+        doc = tomlkit.parse(path.read_text())
+        tools = doc.get("tools")
+        if tools is None or tool not in tools:
+            raise KeyError(f"[tools].{tool} not found in {file}")
+        value = tools[tool]
+        # tomlkit String/Array/InlineTable subclass str/list/dict respectively.
+        if isinstance(value, str):
+            tools[tool] = new_value
+        elif isinstance(value, list):
+            value[0] = new_value
+        elif isinstance(value, dict):
+            value["version"] = new_value
+        else:
+            raise KeyError(f"[tools].{tool} in {file} has an unsupported form")
+        path.write_text(tomlkit.dumps(doc))
+
+    return _write
+
+
 @dataclass(frozen=True)
 class Decl:
     label: str  # human label, e.g. "requires-python"

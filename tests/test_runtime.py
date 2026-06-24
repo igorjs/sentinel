@@ -2,13 +2,16 @@ from datetime import date
 from pathlib import Path
 
 from scripts.runtime import (
+    MISE_FILES,
     detect_runtime_drift,
     read_engines_node,
+    read_mise_tool,
     read_pin,
     read_requires_python,
     read_tool_versions,
     runtime_plan,
     write_engines_node,
+    write_mise_tool,
     write_pin,
     write_requires_python,
     write_tool_versions,
@@ -220,3 +223,48 @@ def test_read_tool_versions_skips_line_without_version(tmp_path):
     # `python` line has no version -> skipped; nodejs still readable
     assert read_tool_versions("python")(tmp_path) is None
     assert read_tool_versions("nodejs", "node")(tmp_path) == "18.16.0"
+
+
+def test_mise_files_constant():
+    assert MISE_FILES == ("mise.toml", ".mise.toml", ".config/mise/config.toml")
+
+
+def test_read_mise_tool_value_forms(tmp_path):
+    (tmp_path / "mise.toml").write_text('[tools]\npython = "3.8.10"\nnode = ["18.16.0", "20"]\n')
+    assert read_mise_tool("mise.toml", "python")(tmp_path) == "3.8.10"
+    assert read_mise_tool("mise.toml", "node")(tmp_path) == "18.16.0"  # array -> first
+
+
+def test_read_mise_tool_table_form_and_absent(tmp_path):
+    (tmp_path / ".mise.toml").write_text(
+        '[tools]\npython = { version = "3.8.10", virtualenv = ".venv" }\n'
+    )
+    assert read_mise_tool(".mise.toml", "python")(tmp_path) == "3.8.10"  # table -> version
+    assert read_mise_tool(".mise.toml", "node")(tmp_path) is None  # key absent
+    assert read_mise_tool("mise.toml", "python")(tmp_path) is None  # file absent
+
+
+def test_write_mise_tool_string_form_minimal_diff(tmp_path):
+    (tmp_path / "mise.toml").write_text(
+        '# project tools\n[tools]\npython = "3.8.10"  # pinned\nnode = "18.16.0"\n'
+    )
+    write_mise_tool("mise.toml", "python")(tmp_path, "3.9.20")
+    after = (tmp_path / "mise.toml").read_text()
+    assert 'python = "3.9.20"' in after
+    assert "# pinned" in after and 'node = "18.16.0"' in after and "# project tools" in after
+
+
+def test_write_mise_tool_array_form(tmp_path):
+    (tmp_path / "mise.toml").write_text('[tools]\nnode = ["18.16.0", "20"]\n')
+    write_mise_tool("mise.toml", "node")(tmp_path, "20.11.1")
+    after = (tmp_path / "mise.toml").read_text()
+    assert '"20.11.1"' in after and '"20"' in after  # primary bumped, fallback kept
+
+
+def test_write_mise_tool_table_form(tmp_path):
+    (tmp_path / "mise.toml").write_text(
+        '[tools]\npython = { version = "3.8.10", virtualenv = ".venv" }\n'
+    )
+    write_mise_tool("mise.toml", "python")(tmp_path, "3.9.20")
+    after = (tmp_path / "mise.toml").read_text()
+    assert '"3.9.20"' in after and "virtualenv" in after  # version bumped, option kept
