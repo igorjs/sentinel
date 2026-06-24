@@ -92,3 +92,62 @@ def test_invalid_min_severity_raises(tmp_path: Path):
     p.write_text('[defaults]\nmin_severity = "urgent"\n')
     with pytest.raises(ConfigError, match="min_severity"):
         load_config(p)
+
+
+def test_update_runtime_defaults_off(tmp_path: Path):
+    cfg_path = tmp_path / "sentinel.toml"
+    cfg_path.write_text("[scopes.python]\nenabled = true\n")
+    cfg = load_config(cfg_path)
+    from scripts.config import update_runtime_enabled
+
+    assert update_runtime_enabled(cfg, "python") is False  # opt-in
+    assert update_runtime_enabled(cfg, "go") is False  # no override -> off
+
+
+def test_update_runtime_opt_in(tmp_path: Path):
+    cfg_path = tmp_path / "sentinel.toml"
+    cfg_path.write_text("[scopes.python]\nupdate_runtime = true\n")
+    cfg = load_config(cfg_path)
+    from scripts.config import update_runtime_enabled
+
+    assert update_runtime_enabled(cfg, "python") is True
+
+
+def test_lead_days_default_and_override(tmp_path: Path):
+    from scripts.config import effective_runtime_eol_lead_days
+
+    cfg_path = tmp_path / "sentinel.toml"
+    cfg_path.write_text(
+        "[defaults]\nruntime_eol_lead_days = 14\n[scopes.python]\nruntime_eol_lead_days = 7\n"
+    )
+    cfg = load_config(cfg_path)
+    assert effective_runtime_eol_lead_days(cfg, "python") == 7  # scope override
+    assert effective_runtime_eol_lead_days(cfg, "go") == 14  # defaults
+
+
+def test_lead_days_default_is_30(tmp_path: Path):
+    from scripts.config import effective_runtime_eol_lead_days
+
+    cfg = load_config(None)
+    assert effective_runtime_eol_lead_days(cfg, "python") == 30
+
+
+def test_lead_days_rejects_negative(tmp_path: Path):
+    cfg_path = tmp_path / "sentinel.toml"
+    cfg_path.write_text("[scopes.python]\nruntime_eol_lead_days = -1\n")
+    with pytest.raises(ConfigError, match="runtime_eol_lead_days"):
+        load_config(cfg_path)
+
+
+def test_lead_days_rejects_fractional(tmp_path: Path):
+    cfg_path = tmp_path / "sentinel.toml"
+    cfg_path.write_text("[scopes.python]\nruntime_eol_lead_days = 1.5\n")
+    with pytest.raises(ConfigError, match="runtime_eol_lead_days"):
+        load_config(cfg_path)
+
+
+def test_lead_days_rejects_bool(tmp_path: Path):
+    cfg_path = tmp_path / "sentinel.toml"
+    cfg_path.write_text("[defaults]\nruntime_eol_lead_days = true\n")
+    with pytest.raises(ConfigError, match="runtime_eol_lead_days"):
+        load_config(cfg_path)

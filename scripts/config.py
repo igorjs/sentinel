@@ -10,9 +10,15 @@ from typing import Any
 from scripts.severity import SEVERITY_ORDER
 
 _ALLOWED_TOP = {"scopes", "custom", "defaults"}
-_ALLOWED_SCOPE_OVERRIDE = {"enabled", "gomod_path", "update_runtime", "min_severity"}
+_ALLOWED_SCOPE_OVERRIDE = {
+    "enabled",
+    "gomod_path",
+    "update_runtime",
+    "min_severity",
+    "runtime_eol_lead_days",
+}
 _REQUIRED_CUSTOM = {"name", "kind"}
-_ALLOWED_DEFAULTS = {"pr_labels", "min_severity"}
+_ALLOWED_DEFAULTS = {"pr_labels", "min_severity", "runtime_eol_lead_days"}
 
 # Per-kind required keys (beyond name/kind) for custom scopes. Validated at load
 # time so a misconfigured scope fails loud here instead of with a bare KeyError
@@ -26,12 +32,24 @@ class ConfigError(ValueError):
     pass
 
 
+def _validate_lead_days(value: Any, *, where: str) -> int:
+    # tomllib gives bool for `true`, float for `1.5`, int for `7`.
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(
+            f"{where}.runtime_eol_lead_days must be a non-negative integer, got {value!r}"
+        )
+    if value < 0:
+        raise ConfigError(f"{where}.runtime_eol_lead_days must be >= 0, got {value!r}")
+    return value
+
+
 @dataclass
 class ScopeOverride:
     enabled: bool = True
     gomod_path: str | None = None
-    update_runtime: bool = True
+    update_runtime: bool = False
     min_severity: str | None = None
+    runtime_eol_lead_days: int | None = None
 
 
 @dataclass
@@ -45,6 +63,7 @@ class CustomScope:
 class Defaults:
     pr_labels: list[str] = field(default_factory=lambda: ["dependencies", "automated"])
     min_severity: str | None = None
+    runtime_eol_lead_days: int = 30
 
 
 @dataclass
@@ -71,11 +90,15 @@ def load_config(path: Path | None) -> Config:
             raise ConfigError(
                 f"scopes.{name}.min_severity must be one of {SEVERITY_ORDER}, got {min_sev!r}"
             )
+        lead = spec.get("runtime_eol_lead_days")
+        if lead is not None:
+            lead = _validate_lead_days(lead, where=f"scopes.{name}")
         cfg.scopes[name] = ScopeOverride(
             enabled=bool(spec.get("enabled", True)),
             gomod_path=spec.get("gomod_path"),
-            update_runtime=bool(spec.get("update_runtime", True)),
+            update_runtime=bool(spec.get("update_runtime", False)),
             min_severity=min_sev,
+            runtime_eol_lead_days=lead,
         )
 
     for i, raw in enumerate(data.get("custom") or []):
@@ -113,6 +136,9 @@ def load_config(path: Path | None) -> Config:
                 f"defaults.min_severity must be one of {SEVERITY_ORDER}, got {min_sev!r}"
             )
         cfg.defaults.min_severity = min_sev
+        lead = defaults.get("runtime_eol_lead_days")
+        if lead is not None:
+            cfg.defaults.runtime_eol_lead_days = _validate_lead_days(lead, where="defaults")
 
     return cfg
 
@@ -122,6 +148,18 @@ def effective_min_severity(config: Config, scope: str) -> str | None:
     if override and override.min_severity is not None:
         return override.min_severity
     return config.defaults.min_severity
+
+
+def update_runtime_enabled(config: Config, scope: str) -> bool:
+    override = config.scopes.get(scope)
+    return override.update_runtime if override else False
+
+
+def effective_runtime_eol_lead_days(config: Config, scope: str) -> int:
+    override = config.scopes.get(scope)
+    if override and override.runtime_eol_lead_days is not None:
+        return override.runtime_eol_lead_days
+    return config.defaults.runtime_eol_lead_days
 
 
 def _reject_unknown(data: dict, allowed: set[str], *, where: str) -> None:
