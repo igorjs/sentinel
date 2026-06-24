@@ -19,9 +19,14 @@ and the `gh-release-pin` custom scope. v2 adds Docker / pre-commit / npm-engine 
 - ❌ Auto-merging PRs (every PR is reviewed by a human)
 - ❌ Routine "is there a newer version?" freshness bumps (that's Dependabot's job)
 
-Sentinel coexists with Dependabot. Dependabot answers *"is there a newer
-version?"*. Sentinel answers *"is there a current vulnerability with a
-known fix, and what's the minimum change that closes it?"*
+Sentinel overlaps with Dependabot's *security updates* — both bump to the
+minimum version that closes an advisory — and complements them. Sentinel adds
+what Dependabot doesn't: OSV's broader advisory coverage (RUSTSEC, Go, and PyPI
+natively, not only the GitHub Advisory Database), language-runtime pins (the `go`
+directive), vendored `gh-release-pin` artefacts, self-cleaning of
+`osv-scanner.toml` / `deny.toml` suppression lists, and a configurable
+`min_severity` gate. It deliberately leaves routine "is there a newer version?"
+freshness bumps to Dependabot's version updates.
 
 ## Quick start
 
@@ -132,13 +137,17 @@ reviews it, so a deliberately-kept suppression can simply be declined.
 
 ## How sentinel differs from Dependabot
 
+Dependabot already does CVE-driven *security updates* to the minimum patched
+version. Sentinel overlaps there and differs on the rest:
+
 | Dimension | Dependabot | sentinel |
 |---|---|---|
-| What it touches | Dep manifest versions | All of that + language runtime pins + vendor pins + OSV ignore lists |
-| Trigger | Schedule; picks latest | Schedule; picks **minimum** version that closes an OSV advisory |
-| Ignore lists | Manual `dependabot.yml` block | Reads + cleans `osv-scanner.toml` / `deny.toml` |
-| PR rationale | Generic | Cites advisory ID + summary + cleared suppressions |
-| Custom registry tracking | Hardcoded ecosystems | `gh-release-pin` (more `target_kind`s coming) |
+| Advisory source | GitHub Advisory Database | OSV (RUSTSEC, Go, PyPI, npm, crates.io, ...) |
+| Version (freshness) updates | Yes — picks latest | No — left to Dependabot |
+| Security updates | Yes — minimum patched version | Yes — minimum version that closes the OSV advisory |
+| Beyond dep versions | — | Language runtime pins + `gh-release-pin` vendor pins |
+| Suppression lists | Manual `dependabot.yml` block | Reads + self-cleans `osv-scanner.toml` / `deny.toml` |
+| Severity gating | Not configurable per-run | `min_severity` (global + per-scope) |
 
 ## License
 
