@@ -58,7 +58,11 @@ def _eol_passed_or_within(raw_eol, *, today: date, lead_days: int) -> bool:
 
 
 def _supported(raw_eol, *, today: date, lead_days: int) -> bool:
-    return raw_eol is not True
+    if raw_eol is True:
+        return False
+    if raw_eol is False or raw_eol is None:
+        return True
+    return date.fromisoformat(raw_eol).toordinal() > (today.toordinal() + lead_days)
 
 
 def _is_lts_even(entry: dict) -> bool:

@@ -62,8 +62,8 @@ TODAY = date(2026, 1, 1)
 
 
 def test_eol_target_python_in_window():
-    # 3.8 already EOL -> oldest supported newer cycle
-    assert eol_target(PY, "3.8", today=TODAY, lead_days=30, lts_only=False) == ("3.9", "3.9.20")
+    # 3.8 already EOL -> oldest supported newer cycle (3.9 is also EOL by date, so skip to 3.12)
+    assert eol_target(PY, "3.8", today=TODAY, lead_days=30, lts_only=False) == ("3.12", "3.12.7")
 
 
 def test_eol_target_python_not_in_window():
@@ -91,3 +91,17 @@ def test_eol_target_node_skips_odd_nonlts():
 
 def test_eol_target_unknown_current_cycle():
     assert eol_target(PY, "3.99", today=TODAY, lead_days=30, lts_only=False) is None
+
+
+def test_eol_target_skips_newer_cycle_already_eol_by_date():
+    cycles = [
+        {"cycle": "3.10", "eol": "2030-01-01", "latest": "3.10.5", "lts": False},
+        {"cycle": "3.9", "eol": "2025-10-31", "latest": "3.9.20", "lts": False},  # past date
+        {"cycle": "3.8", "eol": "2024-10-07", "latest": "3.8.20", "lts": False},  # current, EOL
+    ]
+    today = date(2026, 1, 1)
+    # 3.9 is already EOL by date -> must NOT be chosen; 3.10 (still supported) is the target
+    assert eol_target(cycles, "3.8", today=today, lead_days=30, lts_only=False) == (
+        "3.10",
+        "3.10.5",
+    )
