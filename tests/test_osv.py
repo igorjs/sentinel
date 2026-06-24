@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -37,6 +38,28 @@ def test_scan_missing_binary_raises_clear_error(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(osv_mod.subprocess, "run", _raise)
     with pytest.raises(RuntimeError, match="osv-scanner not found"):
+        OsvCache.scan(tmp_path)
+
+
+def test_scan_no_package_sources_is_empty_not_error(tmp_path: Path, monkeypatch):
+    # osv-scanner exits 128 ("no package sources found") when a scope resolves
+    # but there's nothing it can scan. That's benign: empty result, not a failure.
+    def _fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args, returncode=128, stdout="", stderr="Scanning dir /repo\n"
+        )
+
+    monkeypatch.setattr(osv_mod.subprocess, "run", _fake_run)
+    cache = OsvCache.scan(tmp_path)
+    assert cache.advisories("PyPI") == []
+
+
+def test_scan_unexpected_exit_still_raises(tmp_path: Path, monkeypatch):
+    def _fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args=args, returncode=127, stdout="", stderr="boom")
+
+    monkeypatch.setattr(osv_mod.subprocess, "run", _fake_run)
+    with pytest.raises(RuntimeError, match="osv-scanner failed"):
         OsvCache.scan(tmp_path)
 
 
