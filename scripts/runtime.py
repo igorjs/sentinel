@@ -154,7 +154,10 @@ def read_mise_tool(file: str, tool: str) -> Callable[[Path], str | None]:
             return None
         import tomllib
 
-        data = tomllib.loads(path.read_text())
+        try:
+            data = tomllib.loads(path.read_text())
+        except tomllib.TOMLDecodeError:
+            return None
         tools = data.get("tools")
         if not isinstance(tools, dict):
             return None
@@ -177,6 +180,8 @@ def write_mise_tool(file: str, tool: str) -> Callable[[Path, str], None]:
         if isinstance(value, str):
             tools[tool] = new_value
         elif isinstance(value, list):
+            if not value:
+                raise KeyError(f"[tools].{tool} in {file} has an empty array")
             value[0] = new_value
         elif isinstance(value, dict):
             value["version"] = new_value

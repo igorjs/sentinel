@@ -318,3 +318,17 @@ def test_detect_tool_versions_unparseable_latest(tmp_path):
         tmp_path, "python", lead_days=30, today=_TODAY, fetch=lambda _p: _PY
     )
     assert ".tool-versions" in drift.raw["unparseable"]
+
+
+def test_detect_skips_malformed_mise_fail_closed(tmp_path):
+    from datetime import date
+
+    (tmp_path / "mise.toml").write_text("[tools]\npython = \n")  # invalid TOML
+    (tmp_path / ".tool-versions").write_text("python 3.8.10\n")
+    drift = detect_runtime_drift(
+        tmp_path, "python", lead_days=30, today=date(2026, 1, 1), fetch=lambda _p: _PY
+    )
+    # malformed mise.toml is skipped (no crash); the valid .tool-versions is still bumped
+    assert drift is not None
+    files = [e["file"] for e in drift.raw["edits"]]
+    assert ".tool-versions" in files and "mise.toml" not in files
