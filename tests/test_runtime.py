@@ -6,10 +6,12 @@ from scripts.runtime import (
     read_engines_node,
     read_pin,
     read_requires_python,
+    read_tool_versions,
     runtime_plan,
     write_engines_node,
     write_pin,
     write_requires_python,
+    write_tool_versions,
 )
 
 
@@ -165,3 +167,37 @@ def test_detect_runtime_drift_malformed_cycles_fail_closed(tmp_path):
         tmp_path, "python", lead_days=30, today=date(2026, 1, 1), fetch=malformed_fetch
     )
     assert drift is None  # fail-closed: malformed data -> no drift, no exception
+
+
+def test_read_tool_versions_primary(tmp_path):
+    (tmp_path / ".tool-versions").write_text(
+        "# managed by asdf\npython 3.8.10 3.9.5\nnodejs 18.16.0  # lts\n"
+    )
+    assert read_tool_versions("python")(tmp_path) == "3.8.10"
+    assert read_tool_versions("nodejs", "node")(tmp_path) == "18.16.0"
+
+
+def test_read_tool_versions_node_alias(tmp_path):
+    (tmp_path / ".tool-versions").write_text("node 18.16.0\n")
+    assert read_tool_versions("nodejs", "node")(tmp_path) == "18.16.0"
+
+
+def test_read_tool_versions_absent(tmp_path):
+    assert read_tool_versions("python")(tmp_path) is None  # no file
+    (tmp_path / ".tool-versions").write_text("# only a comment\nruby 3.2.0\n")
+    assert read_tool_versions("python")(tmp_path) is None  # tool not present
+
+
+def test_write_tool_versions_minimal_diff(tmp_path):
+    original = "# header\npython 3.8.10 3.9.5  # keep\nnodejs 18.16.0\n"
+    (tmp_path / ".tool-versions").write_text(original)
+    write_tool_versions("python")(tmp_path, "3.9.20")
+    after = (tmp_path / ".tool-versions").read_text()
+    # only the python primary token changed; fallback, inline comment, nodejs line, header intact
+    assert after == "# header\npython 3.9.20 3.9.5  # keep\nnodejs 18.16.0\n"
+
+
+def test_write_tool_versions_no_trailing_newline_preserved(tmp_path):
+    (tmp_path / ".tool-versions").write_text("python 3.8.10")  # no trailing newline
+    write_tool_versions("python")(tmp_path, "3.9.20")
+    assert (tmp_path / ".tool-versions").read_text() == "python 3.9.20"

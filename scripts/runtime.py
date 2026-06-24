@@ -86,6 +86,50 @@ def write_pin(name: str) -> Callable[[Path, str], None]:
     return _write
 
 
+def read_tool_versions(*tools: str) -> Callable[[Path], str | None]:
+    """Primary version of the first matching tool line in `.tool-versions`."""
+    wanted = set(tools)
+
+    def _read(workdir: Path) -> str | None:
+        path = workdir / ".tool-versions"
+        if not path.exists():
+            return None
+        for line in path.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            parts = stripped.split()
+            if parts[0] in wanted and len(parts) >= 2:
+                return parts[1]
+        return None
+
+    return _read
+
+
+def write_tool_versions(*tools: str) -> Callable[[Path, str], None]:
+    """Rewrite only the matching tool line's primary version, preserving the rest."""
+    wanted = set(tools)
+
+    def _write(workdir: Path, new_value: str) -> None:
+        path = workdir / ".tool-versions"
+        text = path.read_text()
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            parts = stripped.split()
+            if parts[0] in wanted and len(parts) >= 2:
+                m = re.match(r"^(\s*\S+\s+)(\S+)(.*)$", line)
+                lines[i] = f"{m.group(1)}{new_value}{m.group(3)}"
+                new_text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
+                path.write_text(new_text)
+                return
+        raise KeyError(f"no {'/'.join(tools)} line in .tool-versions")
+
+    return _write
+
+
 @dataclass(frozen=True)
 class Decl:
     label: str  # human label, e.g. "requires-python"
