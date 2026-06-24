@@ -7,7 +7,21 @@ import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
+
+from scripts.config import Config, effective_runtime_eol_lead_days, update_runtime_enabled
+from scripts.models import Drift, Plan, Result
+from scripts.pr import apply_plan, branch_name, capture_base_sha, open_issue_fallback
+from scripts.runtime_eol import (
+    RuntimeEolError,
+    bump_floor,
+    bump_pin,
+    eol_target,
+    fetch_cycles,
+    floor_lower_cycle,
+    pin_cycle,
+)
 
 RUNTIME_KEY = "runtime-eol"
 
@@ -128,3 +142,151 @@ PRODUCTS: dict[str, ProductCfg] = {
         ),
     ),
 }
+
+
+def detect_runtime_drift(
+    workdir: Path,
+    scope: str,
+    *,
+    lead_days: int,
+    today: date,
+    fetch: Callable[[str], list[dict]] = fetch_cycles,
+) -> Drift | None:
+    cfg = PRODUCTS[scope]
+    present = [(d, d.read(workdir)) for d in cfg.decls]
+    present = [(d, raw) for d, raw in present if raw is not None]
+    if not present:
+        return None
+    try:
+        cycles = fetch(cfg.product)
+    except RuntimeEolError:
+        return None  # fail-closed
+
+    edits: list[dict] = []
+    unparseable: list[str] = []
+    for decl, raw in present:
+        current = (
+            floor_lower_cycle(raw, parts=cfg.parts)
+            if decl.kind == "floor"
+            else pin_cycle(raw, parts=cfg.parts)
+        )
+        if current is None:
+            unparseable.append(decl.label)
+            continue
+        target = eol_target(
+            cycles, current, today=today, lead_days=lead_days, lts_only=cfg.lts_only
+        )
+        if target is None:
+            continue
+        target_cycle, target_latest = target
+        new = (
+            bump_floor(raw, target_cycle)
+            if decl.kind == "floor"
+            else bump_pin(raw, target_cycle, target_latest, parts=cfg.parts)
+        )
+        if new == raw:
+            continue
+        edits.append(
+            {
+                "label": decl.label,
+                "file": decl.file,
+                "current": raw,
+                "new": new,
+                "write": decl.write,
+            }
+        )
+
+    if not edits and not unparseable:
+        return None
+    summary = (
+        "raise end-of-life runtime: "
+        + ", ".join(f"{e['label']} {e['current']}→{e['new']}" for e in edits)
+        if edits
+        else "end-of-life runtime detected (manual review)"
+    )
+    return Drift(
+        scope=scope,
+        key=RUNTIME_KEY,
+        summary=summary,
+        fixed_versions=[e["new"] for e in edits],
+        current=", ".join(f"{e['label']}={e['current']}" for e in edits),
+        severity="none",
+        raw={"product": cfg.product, "edits": edits, "unparseable": unparseable},
+    )
+
+
+def runtime_plan(workdir: Path, drift: Drift, scope: str) -> Plan:
+    edits = drift.raw["edits"]
+    files = [e["file"] for e in edits]
+    bullets = "\n".join(f"- `{e['file']}`: `{e['current']}` → `{e['new']}`" for e in edits)
+    title = f"runtime({scope}): raise end-of-life runtime declaration(s)"
+    body = (
+        "End-of-life (or near-EOL) runtime declaration(s) raised to the oldest "
+        "still-supported version.\n\n"
+        f"{bullets}\n\n"
+        "Source: [endoflife.date](https://endoflife.date). Independent of CVE severity.\n\n"
+        "Opened automatically by [sentinel](https://github.com/igorjs/sentinel).\n"
+    )
+
+    def _apply(edits=edits) -> None:
+        for e in edits:
+            e["write"](workdir, e["new"])
+
+    _apply.__name__ = "apply_runtime_edits"
+    return Plan(
+        scope=scope,
+        key=RUNTIME_KEY,
+        branch=branch_name(scope, RUNTIME_KEY),
+        title=title,
+        body=body,
+        files_changed=files,
+        commands=[],
+        post_steps=(_apply,),
+    )
+
+
+def _today() -> date:
+    return date.today()
+
+
+def runtime_results(workdir: Path, config: Config, scope: str, *, dry_run: bool) -> list[Result]:
+    """Shared entry point for the runtime-EOL path. Both scopes call this.
+
+    Gates on update_runtime (opt-in); on a drift, opens the bump PR and/or an
+    issue for any declaration that is EOL but unparseable. Fail-closed: a
+    network error inside detect_runtime_drift yields no drift (no result).
+    """
+    if not update_runtime_enabled(config, scope):
+        return []
+    lead = effective_runtime_eol_lead_days(config, scope)
+    drift = detect_runtime_drift(workdir, scope, lead_days=lead, today=_today(), fetch=fetch_cycles)
+    if drift is None:
+        return []
+    out: list[Result] = []
+    base_sha = capture_base_sha(workdir) if not dry_run else ""
+    if drift.raw["edits"]:
+        p = runtime_plan(workdir, drift, scope)
+        out.append(
+            apply_plan(
+                p,
+                dry_run=dry_run,
+                workdir=workdir,
+                base_sha=base_sha,
+                pr_labels=config.defaults.pr_labels,
+            )
+        )
+    if drift.raw["unparseable"]:
+        out.append(
+            open_issue_fallback(
+                scope=scope,
+                key="runtime-eol-unparseable",
+                title="sentinel: unparseable runtime declaration(s)",
+                body=(
+                    "These runtime declarations look end-of-life but sentinel could not "
+                    f"parse them safely: {', '.join(drift.raw['unparseable'])}. Bump manually."
+                ),
+                dry_run=dry_run,
+                workdir=workdir,
+            )
+        )
+    return out
