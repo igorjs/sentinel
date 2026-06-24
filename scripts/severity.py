@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import math
 
-from scripts.types import Drift
+from scripts.models import Drift
 
 SEVERITY_ORDER = ["none", "low", "medium", "high", "critical"]
 

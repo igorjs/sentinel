@@ -7,7 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from scripts.types import Plan, Result
+from scripts.models import Plan, Result
 
 _SAFE = re.compile(r"[^a-z0-9]+")
 _BOT_NAME = "sentinel-bot"

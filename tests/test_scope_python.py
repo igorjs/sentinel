@@ -3,9 +3,9 @@ from pathlib import Path
 import pytest
 
 from scripts.config import Config
+from scripts.models import Drift
 from scripts.osv import OsvCache, from_fixture
 from scripts.scope_python import detect, detect_pkg_manager, plan, run
-from scripts.types import Drift
 
 
 @pytest.fixture

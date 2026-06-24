@@ -7,8 +7,8 @@ import pytest
 
 from scripts import scope_go, scope_javascript, scope_python, scope_rust
 from scripts.config import load_config
+from scripts.models import Drift
 from scripts.osv import OsvCache
-from scripts.types import Drift
 from scripts.validate import UnsafeIdentifier
 
 

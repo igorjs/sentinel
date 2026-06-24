@@ -5,8 +5,8 @@ shared branch."""
 from pathlib import Path
 
 from scripts import scope_go, scope_javascript, scope_python, scope_rust
+from scripts.models import Drift
 from scripts.osv import OsvCache
-from scripts.types import Drift
 
 
 def _drift(scope: str, field: str, name: str, fixed: list[str]) -> Drift:
