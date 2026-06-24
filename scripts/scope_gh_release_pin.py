@@ -7,10 +7,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 from scripts.config import Config, CustomScope
+from scripts.models import Drift, Plan, Result
 from scripts.osv import OsvCache
 from scripts.pr import apply_plan, capture_base_sha, open_issue_fallback
 from scripts.target_yaml_env_var import read_value, write_value
-from scripts.types import Drift, Plan, Result
 from scripts.version import version_key
 
 SCOPE = "gh-release-pin"
