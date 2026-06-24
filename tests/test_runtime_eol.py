@@ -125,6 +125,8 @@ def test_fetch_cycles_parses_json(monkeypatch):
     payload = _json.dumps([{"cycle": "3.12", "eol": "2028-10-31", "latest": "3.12.7"}]).encode()
 
     def fake_urlopen(url, timeout=None):
+        # BytesIO is a valid context manager (io.IOBase), matching the real
+        # HTTPResponse used under `with urlopen(...) as resp:`.
         assert "python" in url
         return io.BytesIO(payload)
 
@@ -145,6 +147,15 @@ def test_fetch_cycles_network_error_raises_typed(monkeypatch):
 def test_fetch_cycles_bad_json_raises_typed(monkeypatch):
     monkeypatch.setattr(
         rt.urllib.request, "urlopen", lambda url, timeout=None: io.BytesIO(b"not json")
+    )
+    with pytest.raises(RuntimeEolError):
+        fetch_cycles("python")
+
+
+def test_fetch_cycles_non_list_raises_typed(monkeypatch):
+    # Valid JSON but not a list -> must fail closed, not return garbage.
+    monkeypatch.setattr(
+        rt.urllib.request, "urlopen", lambda url, timeout=None: io.BytesIO(b'{"not": "a list"}')
     )
     with pytest.raises(RuntimeEolError):
         fetch_cycles("python")
