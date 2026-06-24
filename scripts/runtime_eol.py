@@ -14,6 +14,7 @@ from datetime import date
 
 _FLOOR_RE = re.compile(r">=\s*([0-9]+(?:\.[0-9]+)*)")
 _NUMERIC_RE = re.compile(r"^([vV]?)([0-9]+(?:\.[0-9]+)*)$")
+_CYCLE_RE = re.compile(r"^[0-9]+(?:\.[0-9]+)*$")
 
 
 def floor_lower_cycle(spec: str, *, parts: int) -> str | None:
@@ -51,21 +52,41 @@ def _cycle_key(cycle: str) -> tuple[int, ...]:
     return tuple(int(p) for p in cycle.split("."))
 
 
-def _eol_passed_or_within(raw_eol, *, today: date, lead_days: int) -> bool:
+def _eol_status(raw_eol) -> tuple[str, date | None]:
+    """Classify an endoflife `eol` field. Returns one of:
+    ("eol", None)     already end-of-life (boolean true)
+    ("none", None)    no end-of-life date (false/absent)
+    ("date", d)       a parsed ISO date
+    ("invalid", None) an unparseable/unexpected value (treated conservatively)
+    """
     if raw_eol is True:
-        return True
+        return ("eol", None)
     if raw_eol is False or raw_eol is None:
-        return False
-    eol = date.fromisoformat(raw_eol)
-    return (today.toordinal() + lead_days) >= eol.toordinal()
+        return ("none", None)
+    if isinstance(raw_eol, str):
+        try:
+            return ("date", date.fromisoformat(raw_eol))
+        except ValueError:
+            return ("invalid", None)
+    return ("invalid", None)
+
+
+def _eol_passed_or_within(raw_eol, *, today: date, lead_days: int) -> bool:
+    kind, eol = _eol_status(raw_eol)
+    if kind == "eol":
+        return True
+    if kind == "date":
+        return (today.toordinal() + lead_days) >= eol.toordinal()
+    return False  # "none" or "invalid": not in window
 
 
 def _supported(raw_eol, *, today: date, lead_days: int) -> bool:
-    if raw_eol is True:
-        return False
-    if raw_eol is False or raw_eol is None:
+    kind, eol = _eol_status(raw_eol)
+    if kind == "none":
         return True
-    return date.fromisoformat(raw_eol).toordinal() > (today.toordinal() + lead_days)
+    if kind == "date":
+        return eol.toordinal() > (today.toordinal() + lead_days)
+    return False  # "eol" or "invalid": not a safe target
 
 
 def _is_lts_even(entry: dict) -> bool:
@@ -90,6 +111,7 @@ def eol_target(
     Target = oldest still-supported cycle strictly newer than current_cycle
     (LTS even-major only when lts_only).
     """
+    cycles = [c for c in cycles if isinstance(c.get("cycle"), str) and _CYCLE_RE.match(c["cycle"])]
     by_cycle = {c["cycle"]: c for c in cycles}
     current = by_cycle.get(current_cycle)
     if current is None:

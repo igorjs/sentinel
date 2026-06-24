@@ -151,3 +151,17 @@ def test_runtime_results_opted_in_returns_pr(tmp_path, monkeypatch):
     results = rtmod.runtime_results(tmp_path, cfg, "python", dry_run=True)
     runtime = [r for r in results if r.key == "runtime-eol"]
     assert len(runtime) == 1 and runtime[0].kind == "noop"
+
+
+def test_detect_runtime_drift_malformed_cycles_fail_closed(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname="x"\nversion="0.1"\nrequires-python = ">=3.8"\n'
+    )
+
+    def malformed_fetch(_product):
+        return [{"cycle": "tip"}, {"weird": True}]
+
+    drift = detect_runtime_drift(
+        tmp_path, "python", lead_days=30, today=date(2026, 1, 1), fetch=malformed_fetch
+    )
+    assert drift is None  # fail-closed: malformed data -> no drift, no exception

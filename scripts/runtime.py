@@ -25,7 +25,7 @@ from scripts.runtime_eol import (
 
 RUNTIME_KEY = "runtime-eol"
 
-_ENGINES_NODE_RE = re.compile(r'("engines"\s*:\s*\{[^}]*?"node"\s*:\s*")([^"]*)(")', re.DOTALL)
+_ENGINES_NODE_RE = re.compile(r'("engines"\s*:\s*\{[^}]*?"node"\s*:\s*")([^"]*)(")')
 
 
 def read_requires_python(workdir: Path) -> str | None:

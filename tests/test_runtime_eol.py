@@ -159,3 +159,28 @@ def test_fetch_cycles_non_list_raises_typed(monkeypatch):
     )
     with pytest.raises(RuntimeEolError):
         fetch_cycles("python")
+
+
+def test_eol_target_ignores_malformed_cycle_entries():
+    cycles = [
+        {"cycle": "nightly", "eol": False, "latest": "x", "lts": False},  # non-numeric
+        {"no_cycle": 1},  # missing key
+        {"cycle": "3.12", "eol": "2028-10-31", "latest": "3.12.7", "lts": False},
+        {"cycle": "3.8", "eol": "2024-10-07", "latest": "3.8.20", "lts": False},
+    ]
+    today = date(2026, 1, 1)
+    # malformed rows ignored; 3.8 EOL -> oldest supported is 3.12
+    assert eol_target(cycles, "3.8", today=today, lead_days=30, lts_only=False) == (
+        "3.12",
+        "3.12.7",
+    )
+
+
+def test_eol_target_invalid_eol_string_is_safe():
+    cycles = [
+        {"cycle": "3.8", "eol": "not-a-date", "latest": "3.8.20", "lts": False},
+        {"cycle": "3.12", "eol": "2028-10-31", "latest": "3.12.7", "lts": False},
+    ]
+    today = date(2026, 1, 1)
+    # current cycle's eol is garbage -> not in window -> None, no crash
+    assert eol_target(cycles, "3.8", today=today, lead_days=30, lts_only=False) is None

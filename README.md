@@ -126,7 +126,7 @@ Advisories with no severity data are bumped anyway (and the PR says so), so a
 serious-but-unscored CVE is never silently skipped. `gh-release-pin` scopes are
 freshness-driven and are not gated.
 
-### Runtime EOL bumps (opt-in)
+## Runtime EOL bumps (opt-in)
 
 Set `update_runtime = true` on a `python` or `javascript` scope to also open PRs
 that raise an end-of-life (or near-EOL) runtime declaration to the oldest
