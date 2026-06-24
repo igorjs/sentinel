@@ -54,7 +54,10 @@ runs:
         set -euo pipefail
         FLAGS=""
         if [[ "${{ inputs.dry_run }}" == "true" ]]; then FLAGS="--dry-run"; fi
-        python ${{ github.action_path }}/scripts/sentinel.py \
+        # Invoke as a module from the action root so scripts/ is never sys.path[0]
+        # (a file-path invocation shadows the stdlib `types` module).
+        cd "${{ github.action_path }}"
+        python -m scripts.sentinel \
           --mode run \
           --scope "${{ inputs.scope }}" \
           --config "${{ inputs.config_path }}" \
