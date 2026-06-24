@@ -1,8 +1,10 @@
 from datetime import date
+from datetime import date as _date
 from pathlib import Path
 
 from scripts.runtime import (
     MISE_FILES,
+    PRODUCTS,
     detect_runtime_drift,
     read_engines_node,
     read_mise_tool,
@@ -268,3 +270,51 @@ def test_write_mise_tool_table_form(tmp_path):
     write_mise_tool("mise.toml", "python")(tmp_path, "3.9.20")
     after = (tmp_path / "mise.toml").read_text()
     assert '"3.9.20"' in after and "virtualenv" in after  # version bumped, option kept
+
+
+def test_registry_includes_new_decls():
+    py_files = {d.file for d in PRODUCTS["python"].decls}
+    js_files = {d.file for d in PRODUCTS["javascript"].decls}
+    assert {".tool-versions", "mise.toml", ".mise.toml", ".config/mise/config.toml"} <= py_files
+    assert {".tool-versions", "mise.toml", ".mise.toml", ".config/mise/config.toml"} <= js_files
+    assert len(PRODUCTS["python"].decls) == 6
+    assert len(PRODUCTS["javascript"].decls) == 7
+
+
+_PY = [
+    {"cycle": "3.12", "eol": "2028-10-31", "latest": "3.12.7", "lts": False},
+    {"cycle": "3.9", "eol": "2027-10-31", "latest": "3.9.20", "lts": False},
+    {"cycle": "3.8", "eol": "2024-10-07", "latest": "3.8.20", "lts": False},
+]
+_NODE = [
+    {"cycle": "22", "eol": "2027-04-30", "latest": "22.1.0", "lts": "2024-10-29"},
+    {"cycle": "20", "eol": "2026-04-30", "latest": "20.11.1", "lts": "2023-10-24"},
+    {"cycle": "18", "eol": "2025-04-30", "latest": "18.20.1", "lts": "2022-10-25"},
+]
+_TODAY = _date(2026, 1, 1)
+
+
+def test_detect_bumps_tool_versions_python(tmp_path):
+    (tmp_path / ".tool-versions").write_text("python 3.8.10\n")
+    drift = detect_runtime_drift(
+        tmp_path, "python", lead_days=30, today=_TODAY, fetch=lambda _p: _PY
+    )
+    edit = next(e for e in drift.raw["edits"] if e["file"] == ".tool-versions")
+    assert edit["current"] == "3.8.10" and edit["new"] == "3.9.20"
+
+
+def test_detect_bumps_mise_node(tmp_path):
+    (tmp_path / "mise.toml").write_text('[tools]\nnode = "18.16.0"\n')
+    drift = detect_runtime_drift(
+        tmp_path, "javascript", lead_days=30, today=_TODAY, fetch=lambda _p: _NODE
+    )
+    edit = next(e for e in drift.raw["edits"] if e["file"] == "mise.toml")
+    assert edit["current"] == "18.16.0" and edit["new"] == "20.11.1"
+
+
+def test_detect_tool_versions_unparseable_latest(tmp_path):
+    (tmp_path / ".tool-versions").write_text("python latest\n")
+    drift = detect_runtime_drift(
+        tmp_path, "python", lead_days=30, today=_TODAY, fetch=lambda _p: _PY
+    )
+    assert ".tool-versions" in drift.raw["unparseable"]

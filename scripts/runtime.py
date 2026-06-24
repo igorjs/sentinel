@@ -204,6 +204,12 @@ class ProductCfg:
     decls: tuple[Decl, ...]
 
 
+def _mise_decls(tool: str) -> tuple[Decl, ...]:
+    return tuple(
+        Decl(f, f, "pin", read_mise_tool(f, tool), write_mise_tool(f, tool)) for f in MISE_FILES
+    )
+
+
 PRODUCTS: dict[str, ProductCfg] = {
     "python": ProductCfg(
         product="python",
@@ -224,6 +230,14 @@ PRODUCTS: dict[str, ProductCfg] = {
                 read_pin(".python-version"),
                 write_pin(".python-version"),
             ),
+            Decl(
+                ".tool-versions",
+                ".tool-versions",
+                "pin",
+                read_tool_versions("python"),
+                write_tool_versions("python"),
+            ),
+            *_mise_decls("python"),
         ),
     ),
     "javascript": ProductCfg(
@@ -240,6 +254,14 @@ PRODUCTS: dict[str, ProductCfg] = {
                 read_pin(".node-version"),
                 write_pin(".node-version"),
             ),
+            Decl(
+                ".tool-versions",
+                ".tool-versions",
+                "pin",
+                read_tool_versions("nodejs", "node"),
+                write_tool_versions("nodejs", "node"),
+            ),
+            *_mise_decls("node"),
         ),
     ),
 }
