@@ -133,8 +133,8 @@ that raise an end-of-life (or near-EOL) runtime declaration to the oldest
 still-supported version. EOL dates come from endoflife.date. These PRs are
 independent of `min_severity`.
 
-- Python: `requires-python` (pyproject.toml), `.python-version`
-- Node: `engines.node` (package.json), `.nvmrc`, `.node-version`
+- Python: `requires-python` (pyproject.toml), `.python-version`, `.tool-versions` (asdf/mise), and mise configs (`mise.toml`, `.mise.toml`, `.config/mise/config.toml`)
+- Node: `engines.node` (package.json), `.nvmrc`, `.node-version`, `.tool-versions` (asdf/mise), and mise configs (`mise.toml`, `.mise.toml`, `.config/mise/config.toml`)
 
 `runtime_eol_lead_days` (default `30`, per-scope or under `[defaults]`) opens the
 PR that many days before the EOL date. `update_runtime` defaults to `false`.
