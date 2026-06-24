@@ -126,6 +126,19 @@ Advisories with no severity data are bumped anyway (and the PR says so), so a
 serious-but-unscored CVE is never silently skipped. `gh-release-pin` scopes are
 freshness-driven and are not gated.
 
+### Runtime EOL bumps (opt-in)
+
+Set `update_runtime = true` on a `python` or `javascript` scope to also open PRs
+that raise an end-of-life (or near-EOL) runtime declaration to the oldest
+still-supported version. EOL dates come from endoflife.date. These PRs are
+independent of `min_severity`.
+
+- Python: `requires-python` (pyproject.toml), `.python-version`
+- Node: `engines.node` (package.json), `.nvmrc`, `.node-version`
+
+`runtime_eol_lead_days` (default `30`, per-scope or under `[defaults]`) opens the
+PR that many days before the EOL date. `update_runtime` defaults to `false`.
+
 ## Suppression recovery
 
 `osv-scanner` hides advisories listed in `osv-scanner.toml`'s `IgnoredVulns`, so
