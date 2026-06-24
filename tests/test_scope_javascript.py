@@ -5,6 +5,7 @@ import pytest
 from scripts.config import Config
 from scripts.osv import OsvCache, from_fixture
 from scripts.scope_javascript import detect, detect_pkg_manager, plan, run
+from scripts.types import Drift
 
 
 @pytest.fixture
@@ -109,3 +110,85 @@ def test_run_skips_below_threshold(workdir, capsys):
     results = run(workdir, cfg, osv, dry_run=True)
     assert results == []
     assert "skipped 1" in capsys.readouterr().out
+
+
+def test_plan_cleans_osv_scanner_toml(workdir):
+    (workdir / "osv-scanner.toml").write_text('[[IgnoredVulns]]\nid = "GHSA-X"\n')
+    drift = Drift(
+        scope="javascript",
+        key="GHSA-X",
+        summary="s",
+        fixed_versions=["1.2.3"],
+        current="",
+        raw={"module": "lodash"},
+    )
+    p = plan(workdir, drift, "npm")
+    for step in p.post_steps:
+        step()
+    assert "GHSA-X" not in (workdir / "osv-scanner.toml").read_text()
+
+
+def test_plan_no_cleanup_when_disabled(workdir):
+    (workdir / "osv-scanner.toml").write_text('[[IgnoredVulns]]\nid = "GHSA-X"\n')
+    drift = Drift(
+        scope="javascript",
+        key="GHSA-X",
+        summary="s",
+        fixed_versions=["1.2.3"],
+        current="",
+        raw={"module": "lodash"},
+    )
+    assert plan(workdir, drift, "npm", clean_suppressions=False).post_steps == ()
+
+
+def _osv_two_npm_packages_one_advisory():
+    return OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "npm", "name": "pkg-a"},
+                            "vulnerabilities": [
+                                {
+                                    "id": "GHSA-MULTI",
+                                    "summary": "s",
+                                    "affected": [
+                                        {
+                                            "package": {"name": "pkg-a"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"introduced": "0"},
+                                                        {"fixed": "1.1.0"},
+                                                    ]
+                                                }
+                                            ],
+                                        },
+                                        {
+                                            "package": {"name": "pkg-b"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"introduced": "0"},
+                                                        {"fixed": "2.2.0"},
+                                                    ]
+                                                }
+                                            ],
+                                        },
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+
+def test_run_dedups_suppression_cleanup_across_siblings(workdir, capsys):
+    (workdir / "package-lock.json").write_text("{}")
+    (workdir / "osv-scanner.toml").write_text('[[IgnoredVulns]]\nid = "GHSA-MULTI"\n')
+    run(workdir, Config(), _osv_two_npm_packages_one_advisory(), dry_run=True)
+    assert capsys.readouterr().out.count("clean_osv-scanner.toml") == 1

@@ -5,6 +5,7 @@ import pytest
 from scripts.config import Config
 from scripts.osv import OsvCache, from_fixture
 from scripts.scope_python import detect, detect_pkg_manager, plan, run
+from scripts.types import Drift
 
 
 @pytest.fixture
@@ -131,6 +132,23 @@ def test_run_skips_below_threshold(workdir, capsys):
     results = run(workdir, cfg, osv, dry_run=True)
     assert results == []
     assert "skipped 1" in capsys.readouterr().out
+
+
+def test_plan_cleans_osv_scanner_toml(workdir):
+    (workdir / "uv.lock").write_text("")
+    (workdir / "osv-scanner.toml").write_text('[[IgnoredVulns]]\nid = "PY-X"\n')
+    drift = Drift(
+        scope="python",
+        key="PY-X",
+        summary="s",
+        fixed_versions=["1.2.3"],
+        current="",
+        raw={"module": "requests"},
+    )
+    p = plan(workdir, drift, "poetry")
+    for step in p.post_steps:
+        step()
+    assert "PY-X" not in (workdir / "osv-scanner.toml").read_text()
 
 
 def test_run_pyproject_missing_dependencies_key_returns_issue(tmp_path: Path, fixtures_dir: Path):
