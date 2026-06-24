@@ -6,7 +6,10 @@ version parsing is pure and injectable for tests.
 
 from __future__ import annotations
 
+import json
 import re
+import urllib.error
+import urllib.request
 from datetime import date
 
 _FLOOR_RE = re.compile(r">=\s*([0-9]+(?:\.[0-9]+)*)")
@@ -105,3 +108,22 @@ def eol_target(
         return None
     target = min(candidates, key=lambda c: _cycle_key(c["cycle"]))
     return target["cycle"], str(target.get("latest", target["cycle"]))
+
+
+_API = "https://endoflife.date/api/{product}.json"
+
+
+class RuntimeEolError(RuntimeError):
+    """endoflife.date was unreachable or returned unusable data."""
+
+
+def fetch_cycles(product: str, *, timeout: float = 10.0) -> list[dict]:
+    url = _API.format(product=product)
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            data = json.loads(resp.read())
+    except (urllib.error.URLError, OSError, ValueError, json.JSONDecodeError) as e:
+        raise RuntimeEolError(f"endoflife.date fetch failed for {product}: {e}") from e
+    if not isinstance(data, list):
+        raise RuntimeEolError(f"endoflife.date returned non-list for {product}")
+    return data

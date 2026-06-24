@@ -1,6 +1,20 @@
+import io
+import json as _json
+import urllib.error
 from datetime import date
 
-from scripts.runtime_eol import bump_floor, bump_pin, eol_target, floor_lower_cycle, pin_cycle
+import pytest
+
+from scripts import runtime_eol as rt
+from scripts.runtime_eol import (
+    RuntimeEolError,
+    bump_floor,
+    bump_pin,
+    eol_target,
+    fetch_cycles,
+    floor_lower_cycle,
+    pin_cycle,
+)
 
 
 def test_floor_lower_cycle_python():
@@ -105,3 +119,32 @@ def test_eol_target_skips_newer_cycle_already_eol_by_date():
         "3.10",
         "3.10.5",
     )
+
+
+def test_fetch_cycles_parses_json(monkeypatch):
+    payload = _json.dumps([{"cycle": "3.12", "eol": "2028-10-31", "latest": "3.12.7"}]).encode()
+
+    def fake_urlopen(url, timeout=None):
+        assert "python" in url
+        return io.BytesIO(payload)
+
+    monkeypatch.setattr(rt.urllib.request, "urlopen", fake_urlopen)
+    cycles = fetch_cycles("python")
+    assert cycles[0]["cycle"] == "3.12"
+
+
+def test_fetch_cycles_network_error_raises_typed(monkeypatch):
+    def boom(url, timeout=None):
+        raise urllib.error.URLError("down")
+
+    monkeypatch.setattr(rt.urllib.request, "urlopen", boom)
+    with pytest.raises(RuntimeEolError):
+        fetch_cycles("nodejs")
+
+
+def test_fetch_cycles_bad_json_raises_typed(monkeypatch):
+    monkeypatch.setattr(
+        rt.urllib.request, "urlopen", lambda url, timeout=None: io.BytesIO(b"not json")
+    )
+    with pytest.raises(RuntimeEolError):
+        fetch_cycles("python")
