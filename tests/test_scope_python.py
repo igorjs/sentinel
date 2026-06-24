@@ -1,8 +1,9 @@
+from datetime import date
 from pathlib import Path
 
 import pytest
 
-from scripts.config import Config
+from scripts.config import Config, ScopeOverride
 from scripts.models import Drift
 from scripts.osv import OsvCache, from_fixture
 from scripts.scope_python import detect, detect_pkg_manager, plan, run
@@ -176,3 +177,39 @@ def test_run_pyproject_missing_dependencies_key_returns_issue(tmp_path: Path, fi
     # "blocked" confirming the KeyError handler was reached, not a clean path.
     assert result.kind == "noop"
     assert "blocked" in result.summary
+
+
+def _empty_osv():
+    return OsvCache({"results": []})
+
+
+def test_run_opens_runtime_pr_when_opted_in(tmp_path, monkeypatch):
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname="x"\nversion="0.1"\nrequires-python = ">=3.8"\n'
+    )
+    import scripts.runtime as rtmod
+
+    monkeypatch.setattr(rtmod, "_today", lambda: date(2026, 1, 1))
+    monkeypatch.setattr(
+        rtmod,
+        "fetch_cycles",
+        lambda _p: [
+            {"cycle": "3.12", "eol": "2028-10-31", "latest": "3.12.7", "lts": False},
+            {"cycle": "3.9", "eol": "2025-10-31", "latest": "3.9.20", "lts": False},
+            {"cycle": "3.8", "eol": "2024-10-07", "latest": "3.8.20", "lts": False},
+        ],
+    )
+    cfg = Config(scopes={"python": ScopeOverride(update_runtime=True)})
+    results = run(tmp_path, cfg, _empty_osv(), dry_run=True)
+    runtime = [r for r in results if r.key == "runtime-eol"]
+    assert len(runtime) == 1
+    assert runtime[0].kind == "noop"  # dry-run: apply_plan returns a noop result
+
+
+def test_run_no_runtime_pr_when_opted_out(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname="x"\nversion="0.1"\nrequires-python = ">=3.8"\n'
+    )
+    # default config -> update_runtime False
+    results = run(tmp_path, Config(), _empty_osv(), dry_run=True)
+    assert [r for r in results if r.key == "runtime-eol"] == []
