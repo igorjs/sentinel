@@ -1,8 +1,9 @@
+from datetime import date
 from pathlib import Path
 
 import pytest
 
-from scripts.config import Config
+from scripts.config import Config, ScopeOverride
 from scripts.models import Drift
 from scripts.osv import OsvCache, from_fixture
 from scripts.scope_javascript import detect, detect_pkg_manager, plan, run
@@ -192,3 +193,38 @@ def test_run_dedups_suppression_cleanup_across_siblings(workdir, capsys):
     (workdir / "osv-scanner.toml").write_text('[[IgnoredVulns]]\nid = "GHSA-MULTI"\n')
     run(workdir, Config(), _osv_two_npm_packages_one_advisory(), dry_run=True)
     assert capsys.readouterr().out.count("clean_osv-scanner.toml") == 1
+
+
+def _empty_osv():
+    return OsvCache({"results": []})
+
+
+def test_run_opens_runtime_pr_when_opted_in(tmp_path, monkeypatch):
+    (tmp_path / "package.json").write_text('{\n  "name": "x",\n  "engines": {"node": ">=18"}\n}\n')
+    import scripts.runtime as rtmod
+
+    monkeypatch.setattr(rtmod, "_today", lambda: date(2026, 1, 1))
+    monkeypatch.setattr(
+        rtmod,
+        "fetch_cycles",
+        lambda _p: [
+            {"cycle": "22", "eol": "2027-04-30", "latest": "22.1.0", "lts": "2024-10-29"},
+            {"cycle": "21", "eol": "2024-06-01", "latest": "21.7.3", "lts": False},
+            {"cycle": "20", "eol": "2026-04-30", "latest": "20.11.1", "lts": "2023-10-24"},
+            {"cycle": "18", "eol": "2025-04-30", "latest": "18.20.1", "lts": "2022-10-25"},
+        ],
+    )
+    results = run(
+        tmp_path,
+        Config(scopes={"javascript": ScopeOverride(update_runtime=True)}),
+        _empty_osv(),
+        dry_run=True,
+    )
+    runtime = [r for r in results if r.key == "runtime-eol"]
+    assert len(runtime) == 1 and runtime[0].kind == "noop"  # dry-run
+
+
+def test_run_no_runtime_pr_by_default(tmp_path):
+    (tmp_path / "package.json").write_text('{"name": "x", "engines": {"node": ">=18"}}')
+    results = run(tmp_path, Config(), _empty_osv(), dry_run=True)
+    assert [r for r in results if r.key == "runtime-eol"] == []

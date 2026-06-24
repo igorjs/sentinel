@@ -6,6 +6,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from scripts import runtime
 from scripts.config import Config, effective_min_severity
 from scripts.models import Drift, Plan, Result
 from scripts.osv import OsvCache
@@ -112,13 +113,15 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str, *, clean_suppressions: b
 def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     if not (workdir / "package.json").exists():
         return []
+    results: list[Result] = runtime.runtime_results(workdir, config, SCOPE, dry_run=dry_run)
     pm = detect_pkg_manager(workdir)
     if pm is None:
         # No lockfile → can't safely auto-bump
         any_fixable = detect(workdir, osv)
         if not any_fixable:
-            return []
+            return results
         return [
+            *results,
             open_issue_fallback(
                 scope=SCOPE,
                 key="no-lockfile",
@@ -132,9 +135,8 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                 ),
                 dry_run=dry_run,
                 workdir=workdir,
-            )
+            ),
         ]
-    results: list[Result] = []
     base_sha = capture_base_sha(workdir) if not dry_run else ""
     threshold = effective_min_severity(config, SCOPE)
     detected, skipped = gate(detect(workdir, osv), threshold)
