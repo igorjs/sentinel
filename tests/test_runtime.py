@@ -201,3 +201,22 @@ def test_write_tool_versions_no_trailing_newline_preserved(tmp_path):
     (tmp_path / ".tool-versions").write_text("python 3.8.10")  # no trailing newline
     write_tool_versions("python")(tmp_path, "3.9.20")
     assert (tmp_path / ".tool-versions").read_text() == "python 3.9.20"
+
+
+def test_write_tool_versions_absent_raises(tmp_path):
+    import pytest
+
+    from scripts.runtime import write_tool_versions
+
+    (tmp_path / ".tool-versions").write_text("ruby 3.2.0\n")
+    with pytest.raises(KeyError):
+        write_tool_versions("python")(tmp_path, "3.9.20")
+
+
+def test_read_tool_versions_skips_line_without_version(tmp_path):
+    from scripts.runtime import read_tool_versions
+
+    (tmp_path / ".tool-versions").write_text("python\nnodejs 18.16.0\n")
+    # `python` line has no version -> skipped; nodejs still readable
+    assert read_tool_versions("python")(tmp_path) is None
+    assert read_tool_versions("nodejs", "node")(tmp_path) == "18.16.0"

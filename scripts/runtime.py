@@ -121,6 +121,8 @@ def write_tool_versions(*tools: str) -> Callable[[Path, str], None]:
             parts = stripped.split()
             if parts[0] in wanted and len(parts) >= 2:
                 m = re.match(r"^(\s*\S+\s+)(\S+)(.*)$", line)
+                if m is None:
+                    continue
                 lines[i] = f"{m.group(1)}{new_value}{m.group(3)}"
                 new_text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
                 path.write_text(new_text)
