@@ -414,8 +414,6 @@ def test_runtime_plan_edit_runs_before_refresh(tmp_path, monkeypatch):
 
 
 def test_runtime_results_lock_refresh_failure_falls_back_to_issue(tmp_path, monkeypatch):
-    import subprocess as _sp
-
     import scripts.runtime as rt
     from scripts.config import Config, ScopeOverride
 
@@ -427,7 +425,7 @@ def test_runtime_results_lock_refresh_failure_falls_back_to_issue(tmp_path, monk
     monkeypatch.setattr(rt, "fetch_cycles", lambda _p: _PY)
 
     def boom(*a, **k):
-        raise _sp.CalledProcessError(1, ["uv", "lock"])
+        raise rt.LockRefreshError("boom")
 
     monkeypatch.setattr(rt, "apply_plan", boom)
     cfg = Config(scopes={"python": ScopeOverride(update_runtime=True)})
@@ -435,3 +433,50 @@ def test_runtime_results_lock_refresh_failure_falls_back_to_issue(tmp_path, monk
     # apply_plan still raises, exercising the except branch.
     results = rt.runtime_results(tmp_path, cfg, "python", dry_run=True)
     assert any(r.key == "runtime-eol-lock-refresh" for r in results)
+
+
+def test_refresh_step_absent_pm_raises_lock_refresh_error(tmp_path):
+    from scripts.runtime import LockRefreshError, _refresh_step
+
+    step = _refresh_step(tmp_path, ["sentinel-no-such-pm-xyz", "lock"])
+    import pytest
+
+    with pytest.raises(LockRefreshError):
+        step()
+
+
+def test_refresh_step_nonzero_exit_raises_lock_refresh_error(tmp_path):
+    import sys
+
+    import pytest
+
+    from scripts.runtime import LockRefreshError, _refresh_step
+
+    step = _refresh_step(tmp_path, [sys.executable, "-c", "import sys; sys.exit(1)"])
+    with pytest.raises(LockRefreshError):
+        step()
+
+
+def test_runtime_results_propagates_non_refresh_error(tmp_path, monkeypatch):
+    # A CalledProcessError from apply_plan (git/gh), NOT a refresh failure,
+    # must propagate (not be masked as a lockfile-refresh issue).
+    import subprocess as _sp
+
+    import pytest
+
+    import scripts.runtime as rt
+    from scripts.config import Config, ScopeOverride
+
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname="x"\nversion="0.1"\nrequires-python = ">=3.8"\n'
+    )
+    monkeypatch.setattr(rt, "_today", lambda: _date(2026, 1, 1))
+    monkeypatch.setattr(rt, "fetch_cycles", lambda _p: _PY)
+    monkeypatch.setattr(
+        rt,
+        "apply_plan",
+        lambda *a, **k: (_ for _ in ()).throw(_sp.CalledProcessError(1, ["git", "push"])),
+    )
+    cfg = Config(scopes={"python": ScopeOverride(update_runtime=True)})
+    with pytest.raises(_sp.CalledProcessError):
+        rt.runtime_results(tmp_path, cfg, "python", dry_run=True)
