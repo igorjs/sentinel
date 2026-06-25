@@ -437,15 +437,30 @@ def runtime_results(workdir: Path, config: Config, scope: str, *, dry_run: bool)
     base_sha = capture_base_sha(workdir) if not dry_run else ""
     if drift.raw["edits"]:
         p = runtime_plan(workdir, drift, scope)
-        out.append(
-            apply_plan(
-                p,
-                dry_run=dry_run,
-                workdir=workdir,
-                base_sha=base_sha,
-                pr_labels=config.defaults.pr_labels,
+        try:
+            out.append(
+                apply_plan(
+                    p,
+                    dry_run=dry_run,
+                    workdir=workdir,
+                    base_sha=base_sha,
+                    pr_labels=config.defaults.pr_labels,
+                )
             )
-        )
+        except subprocess.CalledProcessError as e:
+            out.append(
+                open_issue_fallback(
+                    scope=scope,
+                    key="runtime-eol-lock-refresh",
+                    title="sentinel: runtime bumped but lockfile refresh failed",
+                    body=(
+                        "The runtime declaration was bumped but the lockfile refresh command "
+                        f"failed: {e}. Run the package manager's lock command manually."
+                    ),
+                    dry_run=dry_run,
+                    workdir=workdir,
+                )
+            )
     if drift.raw["unparseable"]:
         out.append(
             open_issue_fallback(
