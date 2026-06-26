@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 SCOPE = "docker"
 
@@ -12,6 +14,8 @@ _IMAGE_CFG: dict[str, tuple[str, int, bool]] = {
     "python": ("python", 2, False),
     "node": ("nodejs", 1, True),
 }
+
+_EXCLUDED_DIRS = {".git", "node_modules", "vendor", ".venv"}
 
 _FROM_RE = re.compile(
     r"^(?P<prefix>\s*FROM\s+(?:--platform=\S+\s+)?)"
@@ -38,6 +42,20 @@ def _normalize_image(image: str) -> str:
         if img.startswith(prefix):
             return img[len(prefix) :]
     return img
+
+
+def _is_dockerfile(name: str) -> bool:
+    return name == "Dockerfile" or name.startswith("Dockerfile.") or name.endswith(".Dockerfile")
+
+
+def find_dockerfiles(workdir: Path) -> list[Path]:
+    out: list[Path] = []
+    for root, dirs, files in os.walk(workdir):
+        dirs[:] = [d for d in dirs if d not in _EXCLUDED_DIRS]
+        for f in files:
+            if _is_dockerfile(f):
+                out.append(Path(root) / f)
+    return sorted(out)
 
 
 def parse_from(line: str) -> FromRef | None:
