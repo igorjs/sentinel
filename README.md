@@ -88,6 +88,7 @@ No config file needed for a default repo layout.
 | `go` | `go.mod` (any path) | Module deps via `go get` + `go mod tidy`. Optionally bumps `go <version>` runtime directive for stdlib advisories. | Default ON; `[scopes.go] update_runtime = false` to opt out |
 | `javascript` | `package.json` | npm deps via npm/pnpm/yarn (auto-detected from lockfile) | N/A (deferred to v0.2) |
 | `python` | `pyproject.toml` / `requirements.txt` / lockfile | PyPI deps via poetry/uv/pipenv (auto-detected from lockfile) | N/A (deferred to v0.2) |
+| `docker` | `Dockerfile` (and variants, recursively) | Base-image tags for python / node | Opt-in; `[scopes.docker] update_runtime = true` |
 
 Lockfile-less repos surface a "no lockfile" issue rather than risk a broken bump.
 
@@ -135,6 +136,16 @@ independent of `min_severity`.
 
 - Python: `requires-python` (pyproject.toml), `.python-version`, `.tool-versions` (asdf/mise), and mise configs (`mise.toml`, `.mise.toml`, `.config/mise/config.toml`)
 - Node: `engines.node` (package.json), `.nvmrc`, `.node-version`, `.tool-versions` (asdf/mise), and mise configs (`mise.toml`, `.mise.toml`, `.config/mise/config.toml`)
+
+### Docker base images (opt-in)
+
+Set `update_runtime = true` on a `docker` scope to scan Dockerfiles
+(`Dockerfile`, `Dockerfile.*`, `*.Dockerfile`, recursively) and open a PR raising
+end-of-life official `python` / `node` base-image tags to the oldest still-supported
+version (e.g. `FROM python:3.8-slim` → `FROM python:3.9-slim`). The variant suffix
+(`-slim`, `-alpine`, `-bookworm`, …) is preserved. Digest-pinned bases
+(`python:3.8@sha256:…`) are reported in an issue instead of edited. EOL dates come
+from endoflife.date.
 
 `runtime_eol_lead_days` (default `30`, per-scope or under `[defaults]`) opens the
 PR that many days before the EOL date. `update_runtime` defaults to `false`.
