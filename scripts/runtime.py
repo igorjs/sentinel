@@ -349,8 +349,11 @@ _LOCK_REFRESH: dict[str, dict] = {
         "manifest": "pyproject.toml",
         "locks": [
             ("uv.lock", ["uv", "lock"]),
-            ("poetry.lock", ["poetry", "lock", "--no-update"]),
-            ("Pipfile.lock", ["pipenv", "lock"]),
+            (
+                "poetry.lock",
+                ["poetry", "lock", "--no-update"],
+            ),  # --no-update: deprecated no-op on poetry 2.x; still safe
+            ("Pipfile.lock", ["pipenv", "lock", "--keep-outdated"]),
         ],
     },
     "javascript": {
@@ -362,9 +365,16 @@ _LOCK_REFRESH: dict[str, dict] = {
 }
 
 
+class LockRefreshError(RuntimeError):
+    """A lockfile refresh command failed or its package manager was unavailable."""
+
+
 def _refresh_step(workdir: Path, cmd: list[str]) -> Callable[[], None]:
     def _run() -> None:
-        subprocess.run(cmd, cwd=workdir, check=True)
+        try:
+            subprocess.run(cmd, cwd=workdir, check=True)
+        except (subprocess.CalledProcessError, OSError) as e:
+            raise LockRefreshError(f"{' '.join(cmd)} failed: {e}") from e
 
     _run.__name__ = f"refresh_lock: {' '.join(cmd)}"
     _run.cmd = cmd  # exposed for tests / dry-run visibility
@@ -447,7 +457,7 @@ def runtime_results(workdir: Path, config: Config, scope: str, *, dry_run: bool)
                     pr_labels=config.defaults.pr_labels,
                 )
             )
-        except subprocess.CalledProcessError as e:
+        except LockRefreshError as e:
             out.append(
                 open_issue_fallback(
                     scope=scope,
