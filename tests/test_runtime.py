@@ -2,6 +2,7 @@ from datetime import date
 from datetime import date as _date
 from pathlib import Path
 
+from scripts.models import Drift as _Drift
 from scripts.runtime import (
     MISE_FILES,
     PRODUCTS,
@@ -332,3 +333,81 @@ def test_detect_skips_malformed_mise_fail_closed(tmp_path):
     assert drift is not None
     files = [e["file"] for e in drift.raw["edits"]]
     assert ".tool-versions" in files and "mise.toml" not in files
+
+
+def _floor_drift(file, current, new, scope="python"):
+    edits = [
+        {"label": file, "file": file, "current": current, "new": new, "write": lambda *a: None}
+    ]
+    return _Drift(
+        scope=scope,
+        key="runtime-eol",
+        summary="x",
+        fixed_versions=[new],
+        current="x",
+        severity="none",
+        raw={"product": "python", "edits": edits, "unparseable": []},
+    )
+
+
+def test_runtime_plan_refreshes_uv_lock_on_floor_bump(tmp_path):
+    (tmp_path / "uv.lock").write_text('version = 1\nrequires-python = ">=3.8"\n')
+    plan = runtime_plan(tmp_path, _floor_drift("pyproject.toml", ">=3.8", ">=3.9"), "python")
+    cmds = [getattr(s, "cmd", None) for s in plan.post_steps]
+    assert ["uv", "lock"] in cmds
+    assert "uv.lock" in plan.files_changed
+
+
+def test_runtime_plan_no_refresh_without_lockfile(tmp_path):
+    plan = runtime_plan(tmp_path, _floor_drift("pyproject.toml", ">=3.8", ">=3.9"), "python")
+    assert all(getattr(s, "cmd", None) is None for s in plan.post_steps)  # only _apply
+    assert plan.files_changed == ["pyproject.toml"]
+
+
+def test_runtime_plan_no_refresh_for_pin_only_edit(tmp_path):
+    (tmp_path / "uv.lock").write_text("version = 1\n")
+    plan = runtime_plan(tmp_path, _floor_drift(".python-version", "3.8", "3.9"), "python")
+    assert all(getattr(s, "cmd", None) is None for s in plan.post_steps)
+    assert "uv.lock" not in plan.files_changed
+
+
+def test_runtime_plan_npm_refresh_only_skips_pnpm(tmp_path):
+    (tmp_path / "package-lock.json").write_text("{}")
+    (tmp_path / "pnpm-lock.yaml").write_text("lockfileVersion: '9'\n")
+    plan = runtime_plan(
+        tmp_path, _floor_drift("package.json", ">=18", ">=20", scope="javascript"), "javascript"
+    )
+    cmds = [getattr(s, "cmd", None) for s in plan.post_steps]
+    assert ["npm", "install", "--package-lock-only", "--ignore-scripts"] in cmds
+    assert "package-lock.json" in plan.files_changed
+    assert "pnpm-lock.yaml" not in plan.files_changed
+
+
+def test_runtime_plan_edit_runs_before_refresh(tmp_path, monkeypatch):
+    import scripts.runtime as rt
+
+    (tmp_path / "uv.lock").write_text("version = 1\n")
+    calls = []
+    edits = [
+        {
+            "label": "requires-python",
+            "file": "pyproject.toml",
+            "current": ">=3.8",
+            "new": ">=3.9",
+            "write": lambda *a: calls.append("edit"),
+        }
+    ]
+    drift = _Drift(
+        scope="python",
+        key="runtime-eol",
+        summary="x",
+        fixed_versions=[">=3.9"],
+        current="x",
+        severity="none",
+        raw={"product": "python", "edits": edits, "unparseable": []},
+    )
+    monkeypatch.setattr(rt.subprocess, "run", lambda *a, **k: calls.append("refresh"))
+    plan = runtime_plan(tmp_path, drift, "python")
+    for step in plan.post_steps:
+        step()
+    assert calls == ["edit", "refresh"]

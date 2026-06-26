@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
@@ -343,24 +344,66 @@ def detect_runtime_drift(
     )
 
 
+_LOCK_REFRESH: dict[str, dict] = {
+    "python": {
+        "manifest": "pyproject.toml",
+        "locks": [
+            ("uv.lock", ["uv", "lock"]),
+            ("poetry.lock", ["poetry", "lock", "--no-update"]),
+            ("Pipfile.lock", ["pipenv", "lock"]),
+        ],
+    },
+    "javascript": {
+        "manifest": "package.json",
+        "locks": [
+            ("package-lock.json", ["npm", "install", "--package-lock-only", "--ignore-scripts"]),
+        ],
+    },
+}
+
+
+def _refresh_step(workdir: Path, cmd: list[str]) -> Callable[[], None]:
+    def _run() -> None:
+        subprocess.run(cmd, cwd=workdir, check=True)
+
+    _run.__name__ = f"refresh_lock: {' '.join(cmd)}"
+    _run.cmd = cmd  # exposed for tests / dry-run visibility
+    return _run
+
+
 def runtime_plan(workdir: Path, drift: Drift, scope: str) -> Plan:
     edits = drift.raw["edits"]
     files = [e["file"] for e in edits]
-    bullets = "\n".join(f"- `{e['file']}`: `{e['current']}` → `{e['new']}`" for e in edits)
-    title = f"runtime({scope}): raise end-of-life runtime declaration(s)"
-    body = (
-        "End-of-life (or near-EOL) runtime declaration(s) raised to the oldest "
-        "still-supported version.\n\n"
-        f"{bullets}\n\n"
-        "Source: [endoflife.date](https://endoflife.date). Independent of CVE severity.\n\n"
-        "Opened automatically by [sentinel](https://github.com/igorjs/sentinel).\n"
-    )
 
     def _apply(edits=edits) -> None:
         for e in edits:
             e["write"](workdir, e["new"])
 
     _apply.__name__ = "apply_runtime_edits"
+    post_steps: list[Callable[[], None]] = [_apply]
+
+    refreshed: list[str] = []
+    refresh = _LOCK_REFRESH.get(scope)
+    if refresh and any(e["file"] == refresh["manifest"] for e in edits):
+        for lockfile, cmd in refresh["locks"]:
+            if (workdir / lockfile).exists():
+                post_steps.append(_refresh_step(workdir, cmd))
+                files.append(lockfile)
+                refreshed.append(lockfile)
+
+    bullets = "\n".join(f"- `{e['file']}`: `{e['current']}` → `{e['new']}`" for e in edits)
+    refresh_note = (
+        f"\nLockfile(s) refreshed: {', '.join(f'`{f}`' for f in refreshed)}.\n" if refreshed else ""
+    )
+    title = f"runtime({scope}): raise end-of-life runtime declaration(s)"
+    body = (
+        "End-of-life (or near-EOL) runtime declaration(s) raised to the oldest "
+        "still-supported version.\n\n"
+        f"{bullets}\n"
+        f"{refresh_note}\n"
+        "Source: [endoflife.date](https://endoflife.date). Independent of CVE severity.\n\n"
+        "Opened automatically by [sentinel](https://github.com/igorjs/sentinel).\n"
+    )
     return Plan(
         scope=scope,
         key=RUNTIME_KEY,
@@ -369,7 +412,7 @@ def runtime_plan(workdir: Path, drift: Drift, scope: str) -> Plan:
         body=body,
         files_changed=files,
         commands=[],
-        post_steps=(_apply,),
+        post_steps=tuple(post_steps),
     )
 
 
