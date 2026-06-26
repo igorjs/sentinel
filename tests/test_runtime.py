@@ -411,3 +411,27 @@ def test_runtime_plan_edit_runs_before_refresh(tmp_path, monkeypatch):
     for step in plan.post_steps:
         step()
     assert calls == ["edit", "refresh"]
+
+
+def test_runtime_results_lock_refresh_failure_falls_back_to_issue(tmp_path, monkeypatch):
+    import subprocess as _sp
+
+    import scripts.runtime as rt
+    from scripts.config import Config, ScopeOverride
+
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname="x"\nversion="0.1"\nrequires-python = ">=3.8"\n'
+    )
+    (tmp_path / "uv.lock").write_text("version = 1\n")
+    monkeypatch.setattr(rt, "_today", lambda: _date(2026, 1, 1))
+    monkeypatch.setattr(rt, "fetch_cycles", lambda _p: _PY)
+
+    def boom(*a, **k):
+        raise _sp.CalledProcessError(1, ["uv", "lock"])
+
+    monkeypatch.setattr(rt, "apply_plan", boom)
+    cfg = Config(scopes={"python": ScopeOverride(update_runtime=True)})
+    # dry_run=True so base_sha is "" (no git in tmp_path); the monkeypatched
+    # apply_plan still raises, exercising the except branch.
+    results = rt.runtime_results(tmp_path, cfg, "python", dry_run=True)
+    assert any(r.key == "runtime-eol-lock-refresh" for r in results)
