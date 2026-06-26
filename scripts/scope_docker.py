@@ -93,6 +93,8 @@ def bump_from_line(line: str, new_tag: str) -> str:
     m = _FROM_RE.match(line)
     if m is None:
         raise ValueError(f"not a FROM line: {line!r}")
+    if m["digest"]:
+        raise ValueError(f"refusing to rewrite a digest-pinned FROM line: {line!r}")
     return f"{m['prefix']}{m['image']}:{new_tag}{m['rest']}"
 
 
@@ -117,7 +119,10 @@ def scan(
 
     for path in find_dockerfiles(workdir):
         rel = path.relative_to(workdir).as_posix()
-        lines = path.read_text().splitlines()
+        try:
+            lines = path.read_text().splitlines()
+        except (UnicodeDecodeError, OSError):
+            continue
         for i, line in enumerate(lines):
             ref = parse_from(line)
             if ref is None or ref.image is None or ref.tag is None:
@@ -171,11 +176,15 @@ def _plan(workdir: Path, edits: list[dict]) -> Plan:
             by_file.setdefault(e["file"], []).append(e)
         for rel, file_edits in by_file.items():
             path = workdir / rel
-            text = path.read_text()
-            lines = text.splitlines()
+            with open(path, newline="") as f:  # newline="" => keep original endings
+                lines = f.read().splitlines(keepends=True)
             for e in file_edits:
-                lines[e["lineno"]] = e["new"]
-            path.write_text("\n".join(lines) + ("\n" if text.endswith("\n") else ""))
+                i = e["lineno"]
+                stripped = lines[i].rstrip("\r\n")
+                ending = lines[i][len(stripped) :]
+                lines[i] = e["new"] + ending
+            with open(path, "w", newline="") as f:
+                f.write("".join(lines))
 
     _apply.__name__ = "apply_docker_edits"
     return Plan(

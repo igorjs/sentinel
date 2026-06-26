@@ -161,3 +161,33 @@ def test_run_digest_opens_issue(tmp_path, monkeypatch):
     monkeypatch.setattr(sd, "fetch_cycles", _fetch)
     results = sd.run(tmp_path, _cfg_on(), None, dry_run=True)
     assert any(r.key == "docker-eol-digest" for r in results)
+
+
+def test_apply_rewrites_files_real_mode(tmp_path):
+    df = tmp_path / "Dockerfile"
+    df.write_text("FROM python:3.8-slim AS build\nRUN echo hi\nFROM node:18 AS run\n")
+    edits, _ = sd.scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch)
+    plan = sd._plan(tmp_path, edits)
+    for step in plan.post_steps:
+        step()
+    # only the two FROM lines change; the RUN line and trailing newline are preserved
+    assert df.read_text() == "FROM python:3.9-slim AS build\nRUN echo hi\nFROM node:20 AS run\n"
+
+
+def test_apply_preserves_crlf(tmp_path):
+    df = tmp_path / "Dockerfile"
+    df.write_bytes(b"FROM python:3.8\r\nRUN echo hi\r\n")
+    edits, _ = sd.scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch)
+    plan = sd._plan(tmp_path, edits)
+    for step in plan.post_steps:
+        step()
+    assert df.read_bytes() == b"FROM python:3.9\r\nRUN echo hi\r\n"
+
+
+def test_scan_skips_unreadable_file(tmp_path):
+    (tmp_path / "bin.Dockerfile").write_bytes(b"\xff\xfe\x00\x01")  # not valid UTF-8
+    (tmp_path / "Dockerfile").write_text("FROM python:3.8\n")
+    edits, manual = sd.scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch)
+    # binary file skipped (no crash); the valid Dockerfile still bumped
+    assert [e["file"] for e in edits] == ["Dockerfile"]
+    assert manual == []
