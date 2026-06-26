@@ -138,6 +138,7 @@ independent of `min_severity`.
 
 `runtime_eol_lead_days` (default `30`, per-scope or under `[defaults]`) opens the
 PR that many days before the EOL date. `update_runtime` defaults to `false`.
+When a floor bump touches `requires-python` or `engines.node`, sentinel also refreshes the matching lockfile (`uv.lock`, `poetry.lock`, `Pipfile.lock`, or `package-lock.json`) so the recorded runtime constraint stays consistent. If the package manager isn't available, it opens an issue instead.
 
 ## Suppression recovery
 
