@@ -1,6 +1,8 @@
 from datetime import date
 from pathlib import Path
 
+import scripts.scope_docker as sd
+from scripts.config import Config, ScopeOverride
 from scripts.scope_docker import (
     bump_from_line,
     bump_tag,
@@ -129,3 +131,33 @@ def test_scan_fail_closed_on_fetch_error(tmp_path):
 
     edits, manual = scan(tmp_path, lead_days=30, today=_TODAY, fetch=boom)
     assert edits == [] and manual == []
+
+
+def _cfg_on():
+    return Config(scopes={"docker": ScopeOverride(update_runtime=True)})
+
+
+def test_run_opted_out_returns_empty_without_fetch(tmp_path, monkeypatch):
+    (tmp_path / "Dockerfile").write_text("FROM python:3.8\n")
+
+    def boom(_p):
+        raise AssertionError("must not fetch when opted out")
+
+    monkeypatch.setattr(sd, "fetch_cycles", boom)
+    assert sd.run(tmp_path, Config(), None, dry_run=True) == []
+
+
+def test_run_opted_in_opens_pr_dry_run(tmp_path, monkeypatch):
+    (tmp_path / "Dockerfile").write_text("FROM python:3.8-slim\n")
+    monkeypatch.setattr(sd, "_today", lambda: _TODAY)
+    monkeypatch.setattr(sd, "fetch_cycles", _fetch)
+    results = sd.run(tmp_path, _cfg_on(), None, dry_run=True)
+    assert len(results) == 1 and results[0].kind == "noop"  # dry-run
+
+
+def test_run_digest_opens_issue(tmp_path, monkeypatch):
+    (tmp_path / "Dockerfile").write_text("FROM python:3.8@sha256:abc\n")
+    monkeypatch.setattr(sd, "_today", lambda: _TODAY)
+    monkeypatch.setattr(sd, "fetch_cycles", _fetch)
+    results = sd.run(tmp_path, _cfg_on(), None, dry_run=True)
+    assert any(r.key == "docker-eol-digest" for r in results)

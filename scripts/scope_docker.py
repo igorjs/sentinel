@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from scripts.config import Config, effective_runtime_eol_lead_days, update_runtime_enabled
+from scripts.models import Plan, Result
+from scripts.pr import apply_plan, branch_name, capture_base_sha, open_issue_fallback
 from scripts.runtime_eol import RuntimeEolError, eol_target, fetch_cycles
 
 SCOPE = "docker"
@@ -141,3 +145,95 @@ def scan(
                 {"file": rel, "lineno": i, "old": line, "new": bump_from_line(line, new_tag)}
             )
     return edits, manual
+
+
+def _today() -> date:
+    return date.today()
+
+
+def _plan(workdir: Path, edits: list[dict]) -> Plan:
+    files = sorted({e["file"] for e in edits})
+    bullets = "\n".join(
+        f"- `{e['file']}`: `{e['old'].strip()}` → `{e['new'].strip()}`" for e in edits
+    )
+    title = "runtime(docker): raise end-of-life base image(s)"
+    body = (
+        "End-of-life (or near-EOL) Docker base image(s) raised to the oldest "
+        "still-supported version.\n\n"
+        f"{bullets}\n\n"
+        "Source: [endoflife.date](https://endoflife.date). Independent of CVE severity.\n\n"
+        "Opened automatically by [sentinel](https://github.com/igorjs/sentinel).\n"
+    )
+
+    def _apply(edits=edits) -> None:
+        by_file: dict[str, list[dict]] = {}
+        for e in edits:
+            by_file.setdefault(e["file"], []).append(e)
+        for rel, file_edits in by_file.items():
+            path = workdir / rel
+            text = path.read_text()
+            lines = text.splitlines()
+            for e in file_edits:
+                lines[e["lineno"]] = e["new"]
+            path.write_text("\n".join(lines) + ("\n" if text.endswith("\n") else ""))
+
+    _apply.__name__ = "apply_docker_edits"
+    return Plan(
+        scope=SCOPE,
+        key="runtime-eol",
+        branch=branch_name(SCOPE, "runtime-eol"),
+        title=title,
+        body=body,
+        files_changed=files,
+        commands=[],
+        post_steps=(_apply,),
+    )
+
+
+def run(workdir: Path, config: Config, osv: object, *, dry_run: bool) -> list[Result]:
+    # osv is unused (the dispatcher computes it for every builtin scope).
+    if not update_runtime_enabled(config, SCOPE):
+        return []
+    lead = effective_runtime_eol_lead_days(config, SCOPE)
+    edits, manual = scan(workdir, lead_days=lead, today=_today(), fetch=fetch_cycles)
+    out: list[Result] = []
+    base_sha = capture_base_sha(workdir) if not dry_run else ""
+    if edits:
+        try:
+            out.append(
+                apply_plan(
+                    _plan(workdir, edits),
+                    dry_run=dry_run,
+                    workdir=workdir,
+                    base_sha=base_sha,
+                    pr_labels=config.defaults.pr_labels,
+                )
+            )
+        except (subprocess.CalledProcessError, OSError) as e:
+            out.append(
+                open_issue_fallback(
+                    scope=SCOPE,
+                    key="docker-eol",
+                    title="sentinel: docker base-image bump failed",
+                    body=f"Failed to apply Dockerfile base-image bump: {e}. Bump manually.",
+                    dry_run=dry_run,
+                    workdir=workdir,
+                )
+            )
+    if manual:
+        listing = "\n".join(f"- `{m['file']}`: `{m['image']}:{m['tag']}`" for m in manual)
+        out.append(
+            open_issue_fallback(
+                scope=SCOPE,
+                key="docker-eol-digest",
+                title="sentinel: digest-pinned end-of-life base image(s)",
+                body=(
+                    "These digest-pinned base images are end-of-life but cannot be retagged "
+                    f"automatically (the new tag's digest is unknown):\n\n{listing}\n\n"
+                    "Update the tag and digest manually."
+                ),
+                dry_run=dry_run,
+                workdir=workdir,
+            )
+        )
+    return out
