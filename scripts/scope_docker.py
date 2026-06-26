@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
+
+from scripts.runtime_eol import RuntimeEolError, eol_target, fetch_cycles
 
 SCOPE = "docker"
 
@@ -86,3 +90,54 @@ def bump_from_line(line: str, new_tag: str) -> str:
     if m is None:
         raise ValueError(f"not a FROM line: {line!r}")
     return f"{m['prefix']}{m['image']}:{new_tag}{m['rest']}"
+
+
+def scan(
+    workdir: Path,
+    *,
+    lead_days: int,
+    today: date,
+    fetch: Callable[[str], list[dict]] = fetch_cycles,
+) -> tuple[list[dict], list[dict]]:
+    edits: list[dict] = []
+    manual: list[dict] = []
+    cache: dict[str, list[dict] | None] = {}
+
+    def cycles_for(product: str) -> list[dict] | None:
+        if product not in cache:
+            try:
+                cache[product] = fetch(product)
+            except RuntimeEolError:
+                cache[product] = None  # fail-closed
+        return cache[product]
+
+    for path in find_dockerfiles(workdir):
+        rel = path.relative_to(workdir).as_posix()
+        lines = path.read_text().splitlines()
+        for i, line in enumerate(lines):
+            ref = parse_from(line)
+            if ref is None or ref.image is None or ref.tag is None:
+                continue
+            product, parts, lts_only = _IMAGE_CFG[ref.image]
+            parsed = parse_tag(ref.tag)
+            if parsed is None:
+                continue
+            numeric, suffix = parsed
+            cycles = cycles_for(product)
+            if cycles is None:
+                continue
+            cycle = ".".join(numeric.split(".")[:parts])
+            target = eol_target(cycles, cycle, today=today, lead_days=lead_days, lts_only=lts_only)
+            if target is None:
+                continue
+            target_cycle, target_latest = target
+            if ref.has_digest:
+                manual.append({"file": rel, "image": ref.image, "tag": ref.tag})
+                continue
+            new_tag = bump_tag(numeric, suffix, target_cycle, target_latest, parts=parts)
+            if new_tag == ref.tag:
+                continue
+            edits.append(
+                {"file": rel, "lineno": i, "old": line, "new": bump_from_line(line, new_tag)}
+            )
+    return edits, manual

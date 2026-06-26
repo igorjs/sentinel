@@ -1,6 +1,14 @@
+from datetime import date
 from pathlib import Path
 
-from scripts.scope_docker import bump_from_line, bump_tag, find_dockerfiles, parse_from, parse_tag
+from scripts.scope_docker import (
+    bump_from_line,
+    bump_tag,
+    find_dockerfiles,
+    parse_from,
+    parse_tag,
+    scan,
+)
 
 
 def test_parse_from_official_variants():
@@ -71,3 +79,53 @@ def test_find_dockerfiles_recursive_with_excludes(tmp_path: Path):
 
 def test_find_dockerfiles_sorted_and_empty(tmp_path: Path):
     assert find_dockerfiles(tmp_path) == []
+
+
+_PY = [
+    {"cycle": "3.12", "eol": "2028-10-31", "latest": "3.12.7", "lts": False},
+    {"cycle": "3.9", "eol": "2027-10-31", "latest": "3.9.20", "lts": False},
+    {"cycle": "3.8", "eol": "2024-10-07", "latest": "3.8.20", "lts": False},
+]
+_NODE = [
+    {"cycle": "22", "eol": "2027-04-30", "latest": "22.1.0", "lts": "2024-10-29"},
+    {"cycle": "20", "eol": "2026-04-30", "latest": "20.11.1", "lts": "2023-10-24"},
+    {"cycle": "18", "eol": "2025-04-30", "latest": "18.20.1", "lts": "2022-10-25"},
+]
+_TODAY = date(2026, 1, 1)
+
+
+def _fetch(product):
+    return _PY if product == "python" else _NODE
+
+
+def test_scan_bumps_and_skips(tmp_path):
+    (tmp_path / "Dockerfile").write_text(
+        "FROM python:3.8-slim AS build\n"
+        "FROM node:18 AS run\n"
+        "FROM python:3.12\n"  # current -> skip
+        "FROM ghcr.io/org/python:3.8\n"  # non-official -> skip
+        "FROM python:latest\n"  # no numeric -> skip
+    )
+    edits, manual = scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch)
+    news = sorted(e["new"] for e in edits)
+    assert news == ["FROM node:20 AS run", "FROM python:3.9-slim AS build"]
+    assert manual == []
+
+
+def test_scan_digest_pinned_is_manual(tmp_path):
+    (tmp_path / "Dockerfile").write_text("FROM python:3.8@sha256:abc\n")
+    edits, manual = scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch)
+    assert edits == []
+    assert manual == [{"file": "Dockerfile", "image": "python", "tag": "3.8"}]
+
+
+def test_scan_fail_closed_on_fetch_error(tmp_path):
+    from scripts.runtime_eol import RuntimeEolError
+
+    (tmp_path / "Dockerfile").write_text("FROM python:3.8\n")
+
+    def boom(_product):
+        raise RuntimeEolError("down")
+
+    edits, manual = scan(tmp_path, lead_days=30, today=_TODAY, fetch=boom)
+    assert edits == [] and manual == []
