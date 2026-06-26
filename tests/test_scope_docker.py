@@ -1,4 +1,6 @@
-from scripts.scope_docker import bump_from_line, bump_tag, parse_from, parse_tag
+from pathlib import Path
+
+from scripts.scope_docker import bump_from_line, bump_tag, find_dockerfiles, parse_from, parse_tag
 
 
 def test_parse_from_official_variants():
@@ -51,3 +53,21 @@ def test_bump_from_line_minimal_diff():
     assert bump_from_line("FROM --platform=$BUILDPLATFORM node:18 AS b", "20") == (
         "FROM --platform=$BUILDPLATFORM node:20 AS b"
     )
+
+
+def test_find_dockerfiles_recursive_with_excludes(tmp_path: Path):
+    (tmp_path / "Dockerfile").write_text("FROM python:3.8\n")
+    (tmp_path / "api").mkdir()
+    (tmp_path / "api" / "Dockerfile.prod").write_text("FROM node:18\n")
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web" / "app.Dockerfile").write_text("FROM node:18\n")
+    (tmp_path / "node_modules" / "pkg").mkdir(parents=True)
+    (tmp_path / "node_modules" / "pkg" / "Dockerfile").write_text("FROM python:3.8\n")
+    (tmp_path / "notes.txt").write_text("x")
+
+    found = {p.relative_to(tmp_path).as_posix() for p in find_dockerfiles(tmp_path)}
+    assert found == {"Dockerfile", "api/Dockerfile.prod", "web/app.Dockerfile"}
+
+
+def test_find_dockerfiles_sorted_and_empty(tmp_path: Path):
+    assert find_dockerfiles(tmp_path) == []
