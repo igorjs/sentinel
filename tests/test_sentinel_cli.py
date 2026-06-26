@@ -52,3 +52,24 @@ def test_discover_emits_empty_when_no_triggers(tmp_path: Path):
     result = run_cli("--mode", "discover", cwd=tmp_path)
     scopes = json.loads(result.stdout.strip())
     assert scopes == []
+
+
+def test_discover_emits_docker_only_when_opted_in(tmp_path: Path):
+    (tmp_path / "Dockerfile").write_text("FROM python:3.8\n")
+    # default config -> docker NOT discovered (opt-in)
+    result = run_cli("--mode", "discover", cwd=tmp_path)
+    assert "docker" not in json.loads(result.stdout.strip())
+
+    cfg = tmp_path / ".github" / "sentinel.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text("[scopes.docker]\nupdate_runtime = true\n")
+    result = run_cli("--mode", "discover", "--config", ".github/sentinel.toml", cwd=tmp_path)
+    assert "docker" in json.loads(result.stdout.strip())
+
+
+def test_discover_no_docker_without_dockerfile(tmp_path: Path):
+    cfg = tmp_path / ".github" / "sentinel.toml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text("[scopes.docker]\nupdate_runtime = true\n")
+    result = run_cli("--mode", "discover", "--config", ".github/sentinel.toml", cwd=tmp_path)
+    assert "docker" not in json.loads(result.stdout.strip())

@@ -8,13 +8,14 @@ import sys
 from pathlib import Path
 
 from scripts import (
+    scope_docker,
     scope_gh_release_pin,
     scope_go,
     scope_javascript,
     scope_python,
     scope_rust,
 )
-from scripts.config import Config, load_config
+from scripts.config import Config, load_config, update_runtime_enabled
 from scripts.osv import OsvCache
 
 BUILTIN_SCOPES = {
@@ -22,6 +23,7 @@ BUILTIN_SCOPES = {
     "go": scope_go,
     "javascript": scope_javascript,
     "python": scope_python,
+    "docker": scope_docker,
 }
 
 
@@ -58,6 +60,12 @@ def _discover(workdir: Path, config: Config) -> list[str]:
         enabled.append("javascript")
     if _is_enabled(config, "python") and _has_python(workdir):
         enabled.append("python")
+    if (
+        _is_enabled(config, "docker")
+        and update_runtime_enabled(config, "docker")
+        and scope_docker.find_dockerfiles(workdir)
+    ):
+        enabled.append("docker")
     for custom in config.custom:
         enabled.append(custom.name)
     return enabled
