@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 
-from scripts.runtime_eol import bump_pin, eol_target, pin_cycle
+from scripts.runtime_eol import (
+    RuntimeEolError,
+    bump_pin,
+    eol_target,
+    fetch_cycles,
+    pin_cycle,
+)
 
 SCOPE = "ci"
 
@@ -71,3 +79,62 @@ def find_workflows(workdir: Path) -> list[Path]:
     if not wf_dir.is_dir():
         return []
     return sorted(p for p in wf_dir.iterdir() if p.is_file() and p.suffix in (".yml", ".yaml"))
+
+
+def scan(
+    workdir: Path,
+    *,
+    lead_days: int,
+    today: date,
+    fetch: Callable[[str], list[dict]] = fetch_cycles,
+) -> list[dict]:
+    from ruamel.yaml import YAML
+    from ruamel.yaml.error import YAMLError
+
+    edits: list[dict] = []
+    cache: dict[str, list[dict] | None] = {}
+
+    def cycles_for(product: str) -> list[dict] | None:
+        if product not in cache:
+            try:
+                cache[product] = fetch(product)
+            except RuntimeEolError:
+                cache[product] = None
+        return cache[product]
+
+    for path in find_workflows(workdir):
+        yaml = YAML(typ="rt")
+        yaml.preserve_quotes = True
+        try:
+            doc = yaml.load(path)
+        except (YAMLError, OSError, UnicodeDecodeError):
+            continue
+        if not isinstance(doc, dict):
+            continue
+        changed_keys: list[str] = []
+        for job in (doc.get("jobs") or {}).values():
+            if not isinstance(job, dict):
+                continue
+            matrix = (job.get("strategy") or {}).get("matrix")
+            if not isinstance(matrix, dict):
+                continue
+            for key, cfg in _MATRIX_KEYS.items():
+                seq = matrix.get(key)
+                if not isinstance(seq, list):
+                    continue
+                cycles = cycles_for(cfg[0])
+                if cycles is None:
+                    continue
+                if bump_matrix_list(seq, cfg, today=today, lead_days=lead_days, cycles=cycles):
+                    changed_keys.append(key)
+        if changed_keys:
+            edits.append(
+                {
+                    "file": path.relative_to(workdir).as_posix(),
+                    "path": path,
+                    "doc": doc,
+                    "yaml": yaml,
+                    "keys": sorted(set(changed_keys)),
+                }
+            )
+    return edits
