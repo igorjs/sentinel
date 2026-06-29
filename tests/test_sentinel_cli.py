@@ -90,13 +90,18 @@ def test_discover_emits_ci_only_when_opted_in(tmp_path: Path):
 
 
 def test_discover_emits_ci_for_runs_on_only_workflow(tmp_path: Path):
-    """ci is discovered when a workflow has only a runs-on EOL label (no version matrix)."""
+    """ci is discovered when a workflow file exists and update_runtime is opted in (file-presence gating, not content-based).
+
+    Note: runner-OS content handling (actual bump of a runs-on-only workflow) is tested in test_scope_ci.py::test_scan_runs_on_only_workflow.
+    This CLI test verifies discovery is gated on workflow file presence + update_runtime opt-in.
+    The realistic no-matrix runs-on shape adds nuance over the generic "on: push" stub.
+    """
     wf = tmp_path / ".github" / "workflows"
     wf.mkdir(parents=True)
     (wf / "ci.yml").write_text(
-        "jobs:\n  build:\n    runs-on: ubuntu-20.04\n    steps:\n      - run: echo x\n"
+        "on: push\njobs:\n  build:\n    runs-on: ubuntu-20.04\n    steps:\n      - run: echo x\n"
     )
-    # default config -> ci NOT discovered (opt-in)
+    # default config -> ci NOT discovered (opt-in required)
     result = run_cli("--mode", "discover", cwd=tmp_path)
     assert "ci" not in json.loads(result.stdout.strip())
 
