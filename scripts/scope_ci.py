@@ -109,6 +109,7 @@ def scan(
     for path in find_workflows(workdir):
         yaml = YAML(typ="rt")
         yaml.preserve_quotes = True
+        yaml.indent(mapping=2, sequence=4, offset=2)
         try:
             doc = yaml.load(path)
         except (YAMLError, OSError, UnicodeDecodeError):
@@ -181,6 +182,8 @@ def run(workdir: Path, config: Config, osv: object, *, dry_run: bool) -> list[Re
     # osv unused (the dispatcher computes it for every builtin scope).
     if not update_runtime_enabled(config, SCOPE):
         return []
+    from ruamel.yaml.error import YAMLError
+
     lead = effective_runtime_eol_lead_days(config, SCOPE)
     edits = scan(workdir, lead_days=lead, today=_today(), fetch=fetch_cycles)
     if not edits:
@@ -196,7 +199,7 @@ def run(workdir: Path, config: Config, osv: object, *, dry_run: bool) -> list[Re
                 pr_labels=config.defaults.pr_labels,
             )
         ]
-    except (subprocess.CalledProcessError, OSError) as e:
+    except (subprocess.CalledProcessError, OSError, YAMLError) as e:
         return [
             open_issue_fallback(
                 scope=SCOPE,
