@@ -228,3 +228,32 @@ def test_no_bump_preserves_existing_dups():
         is False
     )
     assert seq == ["3.10", "3.10"]
+
+
+def test_split_version_suffix():
+    assert sc._split_version_suffix("22.04-arm") == ("22.04", "-arm")
+    assert sc._split_version_suffix("13-large") == ("13", "-large")
+    assert sc._split_version_suffix("2019") == ("2019", "")
+    assert sc._split_version_suffix("latest") is None
+    assert sc._split_version_suffix("latest-xlarge") is None
+
+
+def test_parse_runner_label_bare():
+    assert sc.parse_runner_label("ubuntu-22.04") == ("ubuntu", "22.04", "22.04", "")
+    assert sc.parse_runner_label("macos-13") == ("macos", "13", "13", "")
+    assert sc.parse_runner_label("windows-2019") == ("windows", "2019", "2019", "")
+
+
+def test_parse_runner_label_suffix():
+    assert sc.parse_runner_label("macos-13-large") == ("macos", "13", "13", "-large")
+    assert sc.parse_runner_label("ubuntu-22.04-arm") == ("ubuntu", "22.04", "22.04", "-arm")
+
+
+def test_parse_runner_label_skips():
+    assert sc.parse_runner_label("ubuntu-latest") is None
+    assert sc.parse_runner_label("macos-latest-xlarge") is None
+    assert sc.parse_runner_label("${{ matrix.os }}") is None
+    assert sc.parse_runner_label("self-hosted") is None
+    assert sc.parse_runner_label("freebsd-13") is None
+    assert sc.parse_runner_label("ubuntu") is None
+    assert sc.parse_runner_label(18) is None

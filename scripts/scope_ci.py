@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from collections.abc import Callable
 from datetime import date
@@ -25,6 +26,41 @@ _MATRIX_KEYS: dict[str, tuple[str, int, bool]] = {
     "python-version": ("python", 2, False),
     "node-version": ("nodejs", 1, True),
 }
+
+# runner-OS label prefix -> (endoflife product, cycle granularity, LTS-only targets)
+_RUNNER_OS: dict[str, tuple[str, int, bool]] = {
+    "ubuntu": ("ubuntu", 2, True),
+    "macos": ("macos", 1, False),
+    "windows": ("windows-server", 1, False),
+}
+
+_VERSION_SUFFIX_RE = re.compile(r"^(\d+(?:\.\d+)*)(.*)$")
+
+
+def _split_version_suffix(rest: str) -> tuple[str, str] | None:
+    """Split a label remainder into (numeric version, verbatim suffix). None if no leading digit."""
+    m = _VERSION_SUFFIX_RE.match(rest)
+    if not m:
+        return None
+    return m.group(1), m.group(2)
+
+
+def parse_runner_label(label: object) -> tuple[str, str, str, str] | None:
+    """Parse a runner label '<os>-<version>[<suffix>]'. Returns (os, cycle, version, suffix) or None."""
+    if not isinstance(label, str):
+        return None
+    os_name, sep, rest = label.partition("-")
+    if not sep or os_name not in _RUNNER_OS:
+        return None
+    split = _split_version_suffix(rest)
+    if split is None:
+        return None
+    version, suffix = split
+    _, parts, _ = _RUNNER_OS[os_name]
+    cycle = pin_cycle(version, parts=parts)
+    if cycle is None:
+        return None
+    return os_name, cycle, version, suffix
 
 
 def _reclothe(original: object, new_str: str) -> object | None:
