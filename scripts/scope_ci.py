@@ -112,6 +112,43 @@ def bump_os_list(
     return changed
 
 
+def _bump_runs_on(
+    job: dict,
+    *,
+    today: date,
+    lead_days: int,
+    cycles_for: Callable[[str], list[dict] | None],
+) -> bool:
+    """Bump an EOL runner OS in a job's runs-on (scalar or label-set list). Returns whether changed."""
+    value = job.get("runs-on")
+    if isinstance(value, str):
+        new_label = bump_runner_label(
+            value, today=today, lead_days=lead_days, cycles_for=cycles_for
+        )
+        if new_label is None:
+            return False
+        new_val = _reclothe(value, new_label)
+        if new_val is None:
+            return False
+        job["runs-on"] = new_val
+        return True
+    if isinstance(value, list):
+        changed = False
+        for i in range(len(value)):
+            new_label = bump_runner_label(
+                value[i], today=today, lead_days=lead_days, cycles_for=cycles_for
+            )
+            if new_label is None:
+                continue
+            new_val = _reclothe(value[i], new_label)
+            if new_val is None:
+                continue
+            value[i] = new_val
+            changed = True
+        return changed  # label-set semantics: no dedupe
+    return False
+
+
 def _reclothe(original: object, new_str: str) -> object | None:
     """Return new_str dressed in original's scalar style, or None if it can't be."""
     from ruamel.yaml.scalarstring import ScalarString

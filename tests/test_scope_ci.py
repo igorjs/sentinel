@@ -357,3 +357,32 @@ def test_bump_os_list_preserves_quote_style():
     assert sc.bump_os_list(seq, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is True
     assert [str(x) for x in seq] == ["ubuntu-22.04"]
     assert isinstance(seq[0], DQ)
+
+
+def test_bump_runs_on_scalar_eol():
+    job = {"runs-on": "ubuntu-20.04"}
+    assert sc._bump_runs_on(job, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is True
+    assert job["runs-on"] == "ubuntu-22.04"
+
+
+def test_bump_runs_on_scalar_supported():
+    job = {"runs-on": "ubuntu-22.04"}
+    assert sc._bump_runs_on(job, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is False
+    assert job["runs-on"] == "ubuntu-22.04"
+
+
+def test_bump_runs_on_scalar_latest_untouched():
+    job = {"runs-on": "ubuntu-latest"}
+    assert sc._bump_runs_on(job, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is False
+    assert job["runs-on"] == "ubuntu-latest"
+
+
+def test_bump_runs_on_list_no_dedupe():
+    job = {"runs-on": ["ubuntu-20.04", "self-hosted"]}
+    assert sc._bump_runs_on(job, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is True
+    assert job["runs-on"] == ["ubuntu-22.04", "self-hosted"]
+
+
+def test_bump_runs_on_dict_form_skipped():
+    job = {"runs-on": {"group": "g", "labels": ["ubuntu-20.04"]}}
+    assert sc._bump_runs_on(job, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is False
