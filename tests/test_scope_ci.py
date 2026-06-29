@@ -116,6 +116,7 @@ def test_scan_bumps_matrices(tmp_path):
     out = buf.getvalue()
     assert '"3.9"' in out and '"3.10"' in out and '"3.8"' not in out
     assert "[20]" in out or "- 20" in out
+    assert "18" not in out
     assert "# versions" in out  # comment preserved
 
 
@@ -185,3 +186,45 @@ def test_run_apply_failure_falls_back_to_issue(tmp_path, monkeypatch):
     )
     results = sc.run(tmp_path, _cfg_on(), None, dry_run=True)
     assert any(r.key == "ci-eol" for r in results)
+
+
+def test_apply_writes_file_preserving_layout(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    p = wf / "ci.yml"
+    p.write_text(_WF)
+    edits = sc.scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch)
+    plan = sc._plan(edits)
+    for step in plan.post_steps:
+        step()
+    out = p.read_text()
+    # matrix bumped, quoting + inline comment preserved
+    assert '        python-version: ["3.9", "3.10"]  # versions\n' in out
+    assert '"3.8"' not in out
+    # untouched lines keep their exact indentation (no whole-file re-indent)
+    assert "    runs-on: ubuntu-latest\n" in out
+    assert "    steps:\n      - run: echo hi\n" in out
+
+
+def test_run_dump_error_falls_back_to_issue(tmp_path, monkeypatch):
+    from ruamel.yaml.error import YAMLError
+
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(_WF)
+    monkeypatch.setattr(sc, "_today", lambda: _TODAY)
+    monkeypatch.setattr(sc, "fetch_cycles", _fetch)
+    monkeypatch.setattr(sc, "apply_plan", lambda *a, **k: (_ for _ in ()).throw(YAMLError("boom")))
+    results = sc.run(
+        tmp_path, Config(scopes={"ci": ScopeOverride(update_runtime=True)}), None, dry_run=True
+    )
+    assert any(r.key == "ci-eol" for r in results)
+
+
+def test_no_bump_preserves_existing_dups():
+    seq = ["3.10", "3.10"]
+    assert (
+        sc.bump_matrix_list(seq, ("python", 2, False), today=_TODAY, lead_days=30, cycles=_PY)
+        is False
+    )
+    assert seq == ["3.10", "3.10"]
