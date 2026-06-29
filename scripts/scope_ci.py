@@ -247,6 +247,8 @@ def scan(
         for job in (doc.get("jobs") or {}).values():
             if not isinstance(job, dict):
                 continue
+            if _bump_runs_on(job, today=today, lead_days=lead_days, cycles_for=cycles_for):
+                changed_keys.append("runs-on")
             matrix = (job.get("strategy") or {}).get("matrix")
             if not isinstance(matrix, dict):
                 continue
@@ -259,6 +261,11 @@ def scan(
                     continue
                 if bump_matrix_list(seq, cfg, today=today, lead_days=lead_days, cycles=cycles):
                     changed_keys.append(key)
+            os_seq = matrix.get("os")
+            if isinstance(os_seq, list) and bump_os_list(
+                os_seq, today=today, lead_days=lead_days, cycles_for=cycles_for
+            ):
+                changed_keys.append("matrix.os")
         if changed_keys:
             edits.append(
                 {
@@ -279,10 +286,11 @@ def _today() -> date:
 def _plan(edits: list[dict]) -> Plan:
     files = sorted(e["file"] for e in edits)
     bullets = "\n".join(f"- `{e['file']}`: {', '.join(e['keys'])}" for e in edits)
-    title = "runtime(ci): drop end-of-life version-matrix entries"
+    title = "runtime(ci): bump end-of-life CI runner versions"
     body = (
-        "End-of-life Python/Node version-matrix entries replaced with the oldest "
-        "still-supported version.\n\n"
+        "End-of-life CI runtimes replaced with the oldest still-supported version: "
+        "Python/Node version-matrix entries, plus runner OS labels (`runs-on`, "
+        "`strategy.matrix.os`) bumped to the oldest version still in vendor support.\n\n"
         f"{bullets}\n\n"
         "Source: [endoflife.date](https://endoflife.date). Independent of CVE severity.\n\n"
         "Opened automatically by [sentinel](https://github.com/igorjs/sentinel).\n"

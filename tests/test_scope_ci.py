@@ -386,3 +386,60 @@ def test_bump_runs_on_list_no_dedupe():
 def test_bump_runs_on_dict_form_skipped():
     job = {"runs-on": {"group": "g", "labels": ["ubuntu-20.04"]}}
     assert sc._bump_runs_on(job, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is False
+
+
+_WF_OS = """\
+name: ci
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+      - run: echo build
+  test:
+    strategy:
+      matrix:
+        os: ["ubuntu-20.04", "macos-13-large", "windows-2019"]
+        python-version: ["3.8", "3.10"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: echo test
+"""
+
+
+def _fetch_all(product):
+    return {
+        "python": _PY,
+        "nodejs": _NODE,
+        "ubuntu": _UBUNTU,
+        "macos": _MACOS,
+        "windows-server": _WINSRV,
+    }[product]
+
+
+def test_scan_bumps_runner_os_and_matrix(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(_WF_OS)
+    edits = sc.scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch_all)
+    assert len(edits) == 1
+    assert set(edits[0]["keys"]) == {"runs-on", "matrix.os", "python-version"}
+    buf = io.StringIO()
+    edits[0]["yaml"].dump(edits[0]["doc"], buf)
+    out = buf.getvalue()
+    assert "runs-on: ubuntu-22.04" in out  # scalar bumped
+    assert "${{ matrix.os }}" in out  # expression untouched
+    assert '"macos-14-large"' in out  # suffix + quoting preserved
+    assert "windows-2019" in out  # vendor-supported, untouched
+    assert '"ubuntu-22.04"' in out and '"ubuntu-20.04"' not in out
+    assert '"3.9"' in out and '"3.8"' not in out
+
+
+def test_scan_runs_on_only_workflow(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "deploy.yml").write_text(
+        "jobs:\n  d:\n    runs-on: ubuntu-20.04\n    steps:\n      - run: echo x\n"
+    )
+    edits = sc.scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch_all)
+    assert len(edits) == 1 and edits[0]["keys"] == ["runs-on"]
