@@ -331,3 +331,29 @@ def test_bump_runner_label_fail_closed():
         sc.bump_runner_label("ubuntu-20.04", today=_TODAY, lead_days=30, cycles_for=lambda _p: None)
         is None
     )
+
+
+def test_bump_os_list_mixed_per_os_dedupe_and_suffix():
+    seq = ["ubuntu-20.04", "macos-13-large", "windows-2019", "self-hosted", "ubuntu-22.04"]
+    assert sc.bump_os_list(seq, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is True
+    # ubuntu-20.04 -> 22.04 collides with the existing ubuntu-22.04 -> deduped
+    assert seq == ["ubuntu-22.04", "macos-14-large", "windows-2019", "self-hosted"]
+
+
+def test_bump_os_list_no_change_returns_false():
+    seq = ["ubuntu-22.04", "macos-14", "windows-2022"]
+    assert sc.bump_os_list(seq, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is False
+    assert seq == ["ubuntu-22.04", "macos-14", "windows-2022"]
+
+
+def test_bump_os_list_never_empties():
+    seq = ["ubuntu-20.04"]
+    assert sc.bump_os_list(seq, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is True
+    assert seq == ["ubuntu-22.04"]
+
+
+def test_bump_os_list_preserves_quote_style():
+    seq = [DQ("ubuntu-20.04")]
+    assert sc.bump_os_list(seq, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is True
+    assert [str(x) for x in seq] == ["ubuntu-22.04"]
+    assert isinstance(seq[0], DQ)
