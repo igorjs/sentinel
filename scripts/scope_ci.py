@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
+from scripts.config import Config, effective_runtime_eol_lead_days, update_runtime_enabled
+from scripts.models import Plan, Result
+from scripts.pr import apply_plan, branch_name, capture_base_sha, open_issue_fallback
 from scripts.runtime_eol import (
     RuntimeEolError,
     bump_pin,
@@ -138,3 +142,68 @@ def scan(
                 }
             )
     return edits
+
+
+def _today() -> date:
+    return date.today()
+
+
+def _plan(edits: list[dict]) -> Plan:
+    files = sorted(e["file"] for e in edits)
+    bullets = "\n".join(f"- `{e['file']}`: {', '.join(e['keys'])}" for e in edits)
+    title = "runtime(ci): drop end-of-life version-matrix entries"
+    body = (
+        "End-of-life Python/Node version-matrix entries replaced with the oldest "
+        "still-supported version.\n\n"
+        f"{bullets}\n\n"
+        "Source: [endoflife.date](https://endoflife.date). Independent of CVE severity.\n\n"
+        "Opened automatically by [sentinel](https://github.com/igorjs/sentinel).\n"
+    )
+
+    def _apply(edits=edits) -> None:
+        for e in edits:
+            e["yaml"].dump(e["doc"], e["path"])
+
+    _apply.__name__ = "apply_ci_edits"
+    return Plan(
+        scope=SCOPE,
+        key="runtime-eol",
+        branch=branch_name(SCOPE, "runtime-eol"),
+        title=title,
+        body=body,
+        files_changed=files,
+        commands=[],
+        post_steps=(_apply,),
+    )
+
+
+def run(workdir: Path, config: Config, osv: object, *, dry_run: bool) -> list[Result]:
+    # osv unused (the dispatcher computes it for every builtin scope).
+    if not update_runtime_enabled(config, SCOPE):
+        return []
+    lead = effective_runtime_eol_lead_days(config, SCOPE)
+    edits = scan(workdir, lead_days=lead, today=_today(), fetch=fetch_cycles)
+    if not edits:
+        return []
+    base_sha = capture_base_sha(workdir) if not dry_run else ""
+    try:
+        return [
+            apply_plan(
+                _plan(edits),
+                dry_run=dry_run,
+                workdir=workdir,
+                base_sha=base_sha,
+                pr_labels=config.defaults.pr_labels,
+            )
+        ]
+    except (subprocess.CalledProcessError, OSError) as e:
+        return [
+            open_issue_fallback(
+                scope=SCOPE,
+                key="ci-eol",
+                title="sentinel: CI version-matrix bump failed",
+                body=f"Failed to apply the workflow matrix bump: {e}. Bump manually.",
+                dry_run=dry_run,
+                workdir=workdir,
+            )
+        ]
