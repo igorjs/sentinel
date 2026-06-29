@@ -1,9 +1,11 @@
+import io
 from datetime import date
 from pathlib import Path
 
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString as DQ
 
-from scripts.scope_ci import bump_matrix_list, find_workflows
+from scripts.runtime_eol import RuntimeEolError
+from scripts.scope_ci import bump_matrix_list, find_workflows, scan
 
 _PY = [
     {"cycle": "3.12", "eol": "2028-10-31", "latest": "3.12.7", "lts": False},
@@ -19,6 +21,19 @@ _NODE = [
 _TODAY = date(2026, 1, 1)
 _PYCFG = ("python", 2, False)
 _NODECFG = ("nodejs", 1, True)
+_WF = """\
+name: ci
+on: push
+jobs:
+  test:
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.10"]  # versions
+        node-version: [18, 20]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo hi
+"""
 
 
 def test_bump_replaces_eol_keeps_supported():
@@ -78,3 +93,52 @@ def test_find_workflows(tmp_path: Path):
 
 def test_find_workflows_empty(tmp_path: Path):
     assert find_workflows(tmp_path) == []
+
+
+def _fetch(product):
+    return _PY if product == "python" else _NODE
+
+
+def test_scan_bumps_matrices(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(_WF)
+    edits = scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch)
+    assert len(edits) == 1
+    edit = edits[0]
+    assert edit["file"] == ".github/workflows/ci.yml"
+    assert set(edit["keys"]) == {"python-version", "node-version"}
+    # dump the mutated doc and check the result
+    buf = io.StringIO()
+    edit["yaml"].dump(edit["doc"], buf)
+    out = buf.getvalue()
+    assert '"3.9"' in out and '"3.10"' in out and '"3.8"' not in out
+    assert "[20]" in out or "- 20" in out
+    assert "# versions" in out  # comment preserved
+
+
+def test_scan_no_change_when_supported(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(
+        'jobs:\n  t:\n    strategy:\n      matrix:\n        python-version: ["3.10", "3.12"]\n'
+    )
+    assert scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch) == []
+
+
+def test_scan_skips_invalid_yaml(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "bad.yml").write_text("jobs: [unclosed\n")
+    assert scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch) == []
+
+
+def test_scan_fail_closed(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(_WF)
+
+    def boom(_p):
+        raise RuntimeEolError("down")
+
+    assert scan(tmp_path, lead_days=30, today=_TODAY, fetch=boom) == []
