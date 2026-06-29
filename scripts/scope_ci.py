@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from scripts.runtime_eol import bump_pin, eol_target, pin_cycle
 
 SCOPE = "ci"
@@ -62,3 +64,10 @@ def bump_matrix_list(seq, cfg, *, today, lead_days, cycles) -> bool:
                 seen.add(key)
                 i += 1
     return changed
+
+
+def find_workflows(workdir: Path) -> list[Path]:
+    wf_dir = workdir / ".github" / "workflows"
+    if not wf_dir.is_dir():
+        return []
+    return sorted(p for p in wf_dir.iterdir() if p.is_file() and p.suffix in (".yml", ".yaml"))
