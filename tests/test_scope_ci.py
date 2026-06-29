@@ -4,6 +4,8 @@ from pathlib import Path
 
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString as DQ
 
+import scripts.scope_ci as sc
+from scripts.config import Config, ScopeOverride
 from scripts.runtime_eol import RuntimeEolError
 from scripts.scope_ci import bump_matrix_list, find_workflows, scan
 
@@ -142,3 +144,44 @@ def test_scan_fail_closed(tmp_path):
         raise RuntimeEolError("down")
 
     assert scan(tmp_path, lead_days=30, today=_TODAY, fetch=boom) == []
+
+
+def _cfg_on():
+    return Config(scopes={"ci": ScopeOverride(update_runtime=True)})
+
+
+def _write_wf(tmp_path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text(_WF)
+
+
+def test_run_opted_out_returns_empty_without_fetch(tmp_path, monkeypatch):
+    _write_wf(tmp_path)
+
+    def boom(_p):
+        raise AssertionError("must not fetch when opted out")
+
+    monkeypatch.setattr(sc, "fetch_cycles", boom)
+    assert sc.run(tmp_path, Config(), None, dry_run=True) == []
+
+
+def test_run_opted_in_opens_pr_dry_run(tmp_path, monkeypatch):
+    _write_wf(tmp_path)
+    monkeypatch.setattr(sc, "_today", lambda: _TODAY)
+    monkeypatch.setattr(sc, "fetch_cycles", _fetch)
+    results = sc.run(tmp_path, _cfg_on(), None, dry_run=True)
+    assert len(results) == 1 and results[0].kind == "noop"  # dry-run
+
+
+def test_run_apply_failure_falls_back_to_issue(tmp_path, monkeypatch):
+    import subprocess as _sp
+
+    _write_wf(tmp_path)
+    monkeypatch.setattr(sc, "_today", lambda: _TODAY)
+    monkeypatch.setattr(sc, "fetch_cycles", _fetch)
+    monkeypatch.setattr(
+        sc, "apply_plan", lambda *a, **k: (_ for _ in ()).throw(_sp.CalledProcessError(1, ["git"]))
+    )
+    results = sc.run(tmp_path, _cfg_on(), None, dry_run=True)
+    assert any(r.key == "ci-eol" for r in results)
