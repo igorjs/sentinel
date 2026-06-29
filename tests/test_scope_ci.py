@@ -229,6 +229,23 @@ def test_apply_writes_file_preserving_layout(tmp_path):
     assert "    steps:\n      - run: echo hi\n" in out
 
 
+def test_apply_writes_runner_os_preserving_layout(tmp_path, monkeypatch):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    p = wf / "ci.yml"
+    p.write_text(_WF_OS)
+    monkeypatch.setattr(sc, "_today", lambda: _TODAY)
+    monkeypatch.setattr(sc, "fetch_cycles", _fetch_all)
+    edits = sc.scan(tmp_path, lead_days=30, today=_TODAY, fetch=_fetch_all)
+    for step in sc._plan(edits).post_steps:
+        step()
+    out = p.read_text()
+    assert "    runs-on: ubuntu-22.04\n" in out
+    assert "    runs-on: ${{ matrix.os }}\n" in out
+    assert '        os: ["ubuntu-22.04", "macos-14-large", "windows-2019"]\n' in out
+    assert "      - run: echo build\n" in out  # untouched lines keep indentation
+
+
 def test_run_dump_error_falls_back_to_issue(tmp_path, monkeypatch):
     from ruamel.yaml.error import YAMLError
 
@@ -381,6 +398,14 @@ def test_bump_runs_on_list_no_dedupe():
     job = {"runs-on": ["ubuntu-20.04", "self-hosted"]}
     assert sc._bump_runs_on(job, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is True
     assert job["runs-on"] == ["ubuntu-22.04", "self-hosted"]
+
+
+def test_bump_runs_on_list_preserves_quote_style():
+    job = {"runs-on": [DQ("ubuntu-20.04"), "self-hosted"]}
+    assert sc._bump_runs_on(job, today=_TODAY, lead_days=30, cycles_for=_cycles_for) is True
+    assert str(job["runs-on"][0]) == "ubuntu-22.04"
+    assert isinstance(job["runs-on"][0], DQ)
+    assert job["runs-on"][1] == "self-hosted"
 
 
 def test_bump_runs_on_dict_form_skipped():

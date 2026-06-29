@@ -89,7 +89,7 @@ No config file needed for a default repo layout.
 | `javascript` | `package.json` | npm deps via npm/pnpm/yarn (auto-detected from lockfile) | N/A (deferred to v0.2) |
 | `python` | `pyproject.toml` / `requirements.txt` / lockfile | PyPI deps via poetry/uv/pipenv (auto-detected from lockfile) | N/A (deferred to v0.2) |
 | `docker` | `Dockerfile` (and variants, recursively) | Base-image tags for python / node | Opt-in; `[scopes.docker] update_runtime = true` |
-| `ci` | `.github/workflows/*.yml` | End-of-life matrix entries (python-version / node-version) in GitHub Actions workflows | Opt-in; `[scopes.ci] update_runtime = true` |
+| `ci` | `.github/workflows/*.yml` | End-of-life matrix entries (python-version / node-version) and runner OS labels (`runs-on:`, `strategy.matrix.os:`) in GitHub Actions workflows | Opt-in; `[scopes.ci] update_runtime = true` |
 
 Lockfile-less repos surface a "no lockfile" issue rather than risk a broken bump.
 
@@ -159,8 +159,9 @@ open a PR replacing end-of-life `python-version` / `node-version` matrix entries
 the oldest still-supported version (e.g. `python-version: ["3.8", "3.10"]` →
 `["3.9", "3.10"]`). EOL entries are dropped when supported versions remain, an all-EOL
 list collapses to the oldest supported (never empty), and quoting/comments are
-preserved. EOL dates come from endoflife.date. (Runner-OS bumping, e.g. `runs-on:
-ubuntu-20.04`, is not yet covered.)
+preserved. EOL dates come from endoflife.date.
+
+When `update_runtime` is enabled for `ci`, sentinel also bumps end-of-life **runner OS** labels in `runs-on:` and `strategy.matrix.os:` (Ubuntu, macOS, Windows) to the oldest version still in vendor support (source: endoflife.date). Suffixes like `-arm` / `-large` are preserved; `*-latest` and `${{ ... }}` expressions are left untouched. Note: this tracks the OS vendor's end-of-life, which for Windows Server can lag GitHub's runner-image removal.
 
 ## Suppression recovery
 
