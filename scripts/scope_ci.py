@@ -63,6 +63,30 @@ def parse_runner_label(label: object) -> tuple[str, str, str, str] | None:
     return os_name, cycle, version, suffix
 
 
+def bump_runner_label(
+    label: object,
+    *,
+    today: date,
+    lead_days: int,
+    cycles_for: Callable[[str], list[dict] | None],
+) -> str | None:
+    """Return the bumped runner label, or None if not bumpable / fail-closed."""
+    parsed = parse_runner_label(label)
+    if parsed is None:
+        return None
+    os_name, cycle, _version, suffix = parsed
+    product, _parts, lts_only = _RUNNER_OS[os_name]
+    cycles = cycles_for(product)
+    if cycles is None:
+        return None
+    target = eol_target(cycles, cycle, today=today, lead_days=lead_days, lts_only=lts_only)
+    if target is None:
+        return None
+    target_cycle, _target_latest = target
+    new_label = f"{os_name}-{target_cycle}{suffix}"
+    return new_label if new_label != label else None
+
+
 def _reclothe(original: object, new_str: str) -> object | None:
     """Return new_str dressed in original's scalar style, or None if it can't be."""
     from ruamel.yaml.scalarstring import ScalarString
