@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from scripts import (
+    scope_ci,
     scope_docker,
     scope_gh_release_pin,
     scope_go,
@@ -23,6 +24,7 @@ BUILTIN_SCOPES = {
     "go": scope_go,
     "javascript": scope_javascript,
     "python": scope_python,
+    "ci": scope_ci,
     "docker": scope_docker,
 }
 
@@ -66,6 +68,12 @@ def _discover(workdir: Path, config: Config) -> list[str]:
         and scope_docker.find_dockerfiles(workdir)
     ):
         enabled.append("docker")
+    if (
+        _is_enabled(config, "ci")
+        and update_runtime_enabled(config, "ci")
+        and scope_ci.find_workflows(workdir)
+    ):
+        enabled.append("ci")
     for custom in config.custom:
         enabled.append(custom.name)
     return enabled

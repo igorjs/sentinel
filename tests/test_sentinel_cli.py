@@ -73,3 +73,24 @@ def test_discover_no_docker_without_dockerfile(tmp_path: Path):
     cfg.write_text("[scopes.docker]\nupdate_runtime = true\n")
     result = run_cli("--mode", "discover", "--config", ".github/sentinel.toml", cwd=tmp_path)
     assert "docker" not in json.loads(result.stdout.strip())
+
+
+def test_discover_emits_ci_only_when_opted_in(tmp_path: Path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text("on: push\n")
+    # default config -> ci NOT discovered (opt-in)
+    result = run_cli("--mode", "discover", cwd=tmp_path)
+    assert "ci" not in json.loads(result.stdout.strip())
+
+    cfg = tmp_path / "sentinel.toml"
+    cfg.write_text("[scopes.ci]\nupdate_runtime = true\n")
+    result = run_cli("--mode", "discover", "--config", "sentinel.toml", cwd=tmp_path)
+    assert "ci" in json.loads(result.stdout.strip())
+
+
+def test_discover_no_ci_without_workflows(tmp_path: Path):
+    cfg = tmp_path / "sentinel.toml"
+    cfg.write_text("[scopes.ci]\nupdate_runtime = true\n")
+    result = run_cli("--mode", "discover", "--config", "sentinel.toml", cwd=tmp_path)
+    assert "ci" not in json.loads(result.stdout.strip())
