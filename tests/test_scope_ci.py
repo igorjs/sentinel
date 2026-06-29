@@ -20,6 +20,29 @@ _NODE = [
     {"cycle": "20", "eol": "2026-04-30", "latest": "20.11.1", "lts": "2023-10-24"},
     {"cycle": "18", "eol": "2025-04-30", "latest": "18.20.1", "lts": "2022-10-25"},
 ]
+_UBUNTU = [
+    {"cycle": "24.04", "eol": "2029-05-31", "lts": True, "latest": "24.04.1"},
+    {"cycle": "22.04", "eol": "2027-06-01", "lts": True, "latest": "22.04.4"},
+    {"cycle": "20.04", "eol": "2025-05-31", "lts": True, "latest": "20.04.6"},
+]
+_MACOS = [
+    {"cycle": "15", "eol": False, "lts": False, "latest": "15.1"},
+    {"cycle": "14", "eol": False, "lts": False, "latest": "14.7"},
+    {"cycle": "13", "eol": "2025-09-15", "lts": False, "latest": "13.7"},
+    {"cycle": "12", "eol": "2024-09-16", "lts": False, "latest": "12.7"},
+]
+_WINSRV = [
+    {"cycle": "2025", "eol": "2034-10-10", "lts": True, "latest": "10.0.26100"},
+    {"cycle": "2022", "eol": "2031-10-14", "lts": True, "latest": "10.0.20348"},
+    {"cycle": "2019", "eol": "2029-01-09", "lts": True, "latest": "10.0.17763"},
+    {"cycle": "23h2-ac", "eol": "2025-10-24", "lts": False, "latest": "10.0.25398"},
+]
+
+
+def _cycles_for(product):
+    return {"ubuntu": _UBUNTU, "macos": _MACOS, "windows-server": _WINSRV}.get(product)
+
+
 _TODAY = date(2026, 1, 1)
 _PYCFG = ("python", 2, False)
 _NODECFG = ("nodejs", 1, True)
@@ -257,3 +280,54 @@ def test_parse_runner_label_skips():
     assert sc.parse_runner_label("freebsd-13") is None
     assert sc.parse_runner_label("ubuntu") is None
     assert sc.parse_runner_label(18) is None
+
+
+def test_bump_runner_label_ubuntu_eol():
+    out = sc.bump_runner_label("ubuntu-20.04", today=_TODAY, lead_days=30, cycles_for=_cycles_for)
+    assert out == "ubuntu-22.04"
+
+
+def test_bump_runner_label_ubuntu_supported():
+    assert (
+        sc.bump_runner_label("ubuntu-22.04", today=_TODAY, lead_days=30, cycles_for=_cycles_for)
+        is None
+    )
+
+
+def test_bump_runner_label_macos_skips_eol_target():
+    # 13 is also EOL, so 12 bumps to the oldest *supported* cycle, 14
+    assert (
+        sc.bump_runner_label("macos-12", today=_TODAY, lead_days=30, cycles_for=_cycles_for)
+        == "macos-14"
+    )
+    assert (
+        sc.bump_runner_label("macos-13", today=_TODAY, lead_days=30, cycles_for=_cycles_for)
+        == "macos-14"
+    )
+
+
+def test_bump_runner_label_preserves_suffix():
+    out = sc.bump_runner_label("macos-13-large", today=_TODAY, lead_days=30, cycles_for=_cycles_for)
+    assert out == "macos-14-large"
+
+
+def test_bump_runner_label_windows_vendor_supported():
+    # vendor EOL 2029, so no bump today (the documented runner-lag case)
+    assert (
+        sc.bump_runner_label("windows-2019", today=_TODAY, lead_days=30, cycles_for=_cycles_for)
+        is None
+    )
+
+
+def test_bump_runner_label_non_label():
+    assert (
+        sc.bump_runner_label("ubuntu-latest", today=_TODAY, lead_days=30, cycles_for=_cycles_for)
+        is None
+    )
+
+
+def test_bump_runner_label_fail_closed():
+    assert (
+        sc.bump_runner_label("ubuntu-20.04", today=_TODAY, lead_days=30, cycles_for=lambda _p: None)
+        is None
+    )
