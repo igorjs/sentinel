@@ -87,6 +87,31 @@ def bump_runner_label(
     return new_label if new_label != label else None
 
 
+def bump_os_list(
+    seq,
+    *,
+    today: date,
+    lead_days: int,
+    cycles_for: Callable[[str], list[dict] | None],
+) -> bool:
+    """Bump EOL runner labels in a matrix.os choice list, then dedupe. Returns whether changed."""
+    changed = False
+    for i in range(len(seq)):
+        new_label = bump_runner_label(
+            seq[i], today=today, lead_days=lead_days, cycles_for=cycles_for
+        )
+        if new_label is None:
+            continue
+        new_val = _reclothe(seq[i], new_label)
+        if new_val is None:
+            continue
+        seq[i] = new_val
+        changed = True
+    if changed:
+        _dedupe(seq)
+    return changed
+
+
 def _reclothe(original: object, new_str: str) -> object | None:
     """Return new_str dressed in original's scalar style, or None if it can't be."""
     from ruamel.yaml.scalarstring import ScalarString
@@ -103,6 +128,19 @@ def _reclothe(original: object, new_str: str) -> object | None:
     if isinstance(original, str):
         return new_str
     return None  # float / other -> leave untouched
+
+
+def _dedupe(seq) -> None:
+    """Drop later duplicates in place, preserving first-occurrence order."""
+    seen: set[str] = set()
+    i = 0
+    while i < len(seq):
+        key = str(seq[i])
+        if key in seen:
+            del seq[i]
+        else:
+            seen.add(key)
+            i += 1
 
 
 def bump_matrix_list(seq, cfg, *, today, lead_days, cycles) -> bool:
@@ -126,15 +164,7 @@ def bump_matrix_list(seq, cfg, *, today, lead_days, cycles) -> bool:
         seq[i] = new_val
         changed = True
     if changed:
-        seen: set[str] = set()
-        i = 0
-        while i < len(seq):
-            key = str(seq[i])
-            if key in seen:
-                del seq[i]
-            else:
-                seen.add(key)
-                i += 1
+        _dedupe(seq)
     return changed
 
 
