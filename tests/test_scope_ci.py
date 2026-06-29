@@ -1,8 +1,9 @@
 from datetime import date
+from pathlib import Path
 
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString as DQ
 
-from scripts.scope_ci import bump_matrix_list
+from scripts.scope_ci import bump_matrix_list, find_workflows
 
 _PY = [
     {"cycle": "3.12", "eol": "2028-10-31", "latest": "3.12.7", "lts": False},
@@ -62,3 +63,18 @@ def test_bump_skips_non_numeric():
     seq = ["pypy3.10", "3.8"]
     assert bump_matrix_list(seq, _PYCFG, today=_TODAY, lead_days=30, cycles=_PY) is True
     assert seq == ["pypy3.10", "3.9"]
+
+
+def test_find_workflows(tmp_path: Path):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "ci.yml").write_text("on: push\n")
+    (wf / "release.yaml").write_text("on: push\n")
+    (wf / "notes.txt").write_text("x")
+    (tmp_path / "other.yml").write_text("x")  # not under workflows/
+    found = {p.relative_to(tmp_path).as_posix() for p in find_workflows(tmp_path)}
+    assert found == {".github/workflows/ci.yml", ".github/workflows/release.yaml"}
+
+
+def test_find_workflows_empty(tmp_path: Path):
+    assert find_workflows(tmp_path) == []
