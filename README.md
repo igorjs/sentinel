@@ -89,6 +89,7 @@ No config file needed for a default repo layout.
 | `javascript` | `package.json` | npm deps via npm/pnpm/yarn (auto-detected from lockfile) | N/A (deferred to v0.2) |
 | `python` | `pyproject.toml` / `requirements.txt` / lockfile | PyPI deps via poetry/uv/pipenv (auto-detected from lockfile) | N/A (deferred to v0.2) |
 | `docker` | `Dockerfile` (and variants, recursively) | Base-image tags for python / node | Opt-in; `[scopes.docker] update_runtime = true` |
+| `ci` | `.github/workflows/*.yml` | End-of-life matrix entries (python-version / node-version) in GitHub Actions workflows | Opt-in; `[scopes.ci] update_runtime = true` |
 
 Lockfile-less repos surface a "no lockfile" issue rather than risk a broken bump.
 
@@ -150,6 +151,16 @@ from endoflife.date.
 `runtime_eol_lead_days` (default `30`, per-scope or under `[defaults]`) opens the
 PR that many days before the EOL date. `update_runtime` defaults to `false`.
 When a floor bump touches `requires-python` or `engines.node`, sentinel also refreshes the matching lockfile (`uv.lock`, `poetry.lock`, `Pipfile.lock`, or `package-lock.json`) so the recorded runtime constraint stays consistent. If the package manager isn't available, it opens an issue instead.
+
+### CI version matrices (opt-in)
+
+Set `update_runtime = true` on a `ci` scope to scan `.github/workflows/*.yml` and
+open a PR replacing end-of-life `python-version` / `node-version` matrix entries with
+the oldest still-supported version (e.g. `python-version: ["3.8", "3.10"]` →
+`["3.9", "3.10"]`). EOL entries are dropped when supported versions remain, an all-EOL
+list collapses to the oldest supported (never empty), and quoting/comments are
+preserved. EOL dates come from endoflife.date. (Runner-OS bumping, e.g. `runs-on:
+ubuntu-20.04`, is not yet covered.)
 
 ## Suppression recovery
 
