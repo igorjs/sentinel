@@ -113,8 +113,11 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str, *, clean_suppressions: b
 def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     if not (workdir / "package.json").exists():
         return []
+    base_sha = capture_base_sha(workdir) if not dry_run else ""
     results: list[Result] = runtime.runtime_results(workdir, config, SCOPE, dry_run=dry_run)
-    results.extend(freshness.run(workdir, config, dry_run=dry_run, adapter=freshness_npm))
+    results.extend(
+        freshness.run(workdir, config, dry_run=dry_run, adapter=freshness_npm, base_sha=base_sha)
+    )
     pm = detect_pkg_manager(workdir)
     if pm is None:
         # No lockfile -> can't safely auto-bump
@@ -138,7 +141,6 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                 workdir=workdir,
             ),
         ]
-    base_sha = capture_base_sha(workdir) if not dry_run else ""
     threshold = effective_min_severity(config, SCOPE)
     detected, skipped = gate(detect(workdir, osv), threshold)
     if skipped:

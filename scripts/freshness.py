@@ -18,7 +18,8 @@ from scripts.config import (
     update_freshness_enabled,
 )
 from scripts.models import Plan, Result
-from scripts.pr import apply_plan, branch_name, capture_base_sha, open_issue_fallback
+from scripts.pr import apply_plan, branch_name, open_issue_fallback
+from scripts.validate import UnsafeIdentifier, ensure_safe
 from scripts.version import version_key
 
 
@@ -129,7 +130,7 @@ def _issue(scope: str, detail: str, *, dry_run: bool, workdir) -> Result:
     )
 
 
-def run(workdir, config: Config, *, dry_run: bool, adapter) -> list[Result]:
+def run(workdir, config: Config, *, dry_run: bool, adapter, base_sha: str = "") -> list[Result]:
     scope = adapter.SCOPE
     if not update_freshness_enabled(config, scope):
         return []
@@ -146,8 +147,13 @@ def run(workdir, config: Config, *, dry_run: bool, adapter) -> list[Result]:
     )
     if not selections:
         return []
+    try:
+        ensure_safe(*[s.name for s in selections], *[s.target for s in selections])
+    except UnsafeIdentifier as e:
+        return [
+            _issue(scope, f"unsafe dependency identifier: {e}", dry_run=dry_run, workdir=workdir)
+        ]
     note = _dependabot_note(workdir)
-    base_sha = capture_base_sha(workdir) if not dry_run else ""
     per_dep = effective_freshness_group(config, scope) == "dependency"
     if per_dep:
         groups = [[s] for s in selections]

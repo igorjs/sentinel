@@ -239,7 +239,7 @@ def test_run_includes_freshness_results(tmp_path, monkeypatch):
 
     sentinel = Result(scope="javascript", key="freshness", kind="noop", summary="")
     monkeypatch.setattr(
-        sj.freshness, "run", lambda workdir, config, *, dry_run, adapter: [sentinel]
+        sj.freshness, "run", lambda workdir, config, *, dry_run, adapter, base_sha="": [sentinel]
     )
     # no lockfile -> security path is a no-op; freshness result still present
     cfg = Config(scopes={"javascript": ScopeOverride(update_freshness=True)})
@@ -250,3 +250,28 @@ def test_run_includes_freshness_results(tmp_path, monkeypatch):
 
     results = sj.run(tmp_path, cfg, _Osv(), dry_run=True)
     assert sentinel in results
+
+
+def test_run_threads_clean_base_sha_to_freshness(tmp_path, monkeypatch):
+    import scripts.scope_javascript as sj
+    from scripts.config import Config, ScopeOverride
+
+    (tmp_path / "package.json").write_text(
+        '{"name":"x"}'
+    )  # no lockfile -> security path is a no-op
+    monkeypatch.setattr(sj, "capture_base_sha", lambda wd: "CLEANBASE")
+    seen = {}
+
+    def fake_fresh(workdir, config, *, dry_run, adapter, base_sha):
+        seen["base_sha"] = base_sha
+        return []
+
+    monkeypatch.setattr(sj.freshness, "run", fake_fresh)
+
+    class _Osv:
+        def fixable_advisories(self, eco):
+            return []
+
+    cfg = Config(scopes={"javascript": ScopeOverride(update_freshness=True)})
+    sj.run(tmp_path, cfg, _Osv(), dry_run=False)
+    assert seen["base_sha"] == "CLEANBASE"
