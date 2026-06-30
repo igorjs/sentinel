@@ -71,3 +71,36 @@ def test_list_outdated_unexpected_exit_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", _wd(tmp_path, outdated_rc=2, stdout=""))
     with pytest.raises(FreshnessError):
         N.list_outdated(tmp_path)
+
+
+def test_list_outdated_non_dict_root_raises(tmp_path, monkeypatch):
+    monkeypatch.setattr(subprocess, "run", _wd(tmp_path, stdout="[]"))
+    with pytest.raises(FreshnessError):
+        N.list_outdated(tmp_path)
+
+
+def test_list_outdated_bad_lockfile_root_raises(tmp_path, monkeypatch):
+    (tmp_path / "package-lock.json").write_text("[]")
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(
+            returncode=1,
+            stdout='{"lodash": {"current": "1.0.0", "wanted": "1.1.0", "latest": "2.0.0"}}',
+            stderr="",
+        ),
+    )
+    with pytest.raises(FreshnessError):
+        N.list_outdated(tmp_path)
+
+
+def test_list_outdated_workspace_list_shape(tmp_path, monkeypatch):
+    stdout = '{"pkg": [{"current": "1.0.0", "wanted": "2.0.0", "latest": "2.0.0"}]}'
+    (tmp_path / "package-lock.json").write_text(_LOCK)
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(returncode=1, stdout=stdout, stderr=""),
+    )
+    out = N.list_outdated(tmp_path)
+    assert any(o.name == "pkg" and o.current == "1.0.0" for o in out)
