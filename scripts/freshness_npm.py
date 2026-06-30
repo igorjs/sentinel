@@ -6,7 +6,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from scripts.freshness import FreshnessError, Outdated
+from scripts.freshness import FreshnessError, Outdated, Selection
 
 SCOPE = "javascript"
 FILES_CHANGED = ["package.json", "package-lock.json"]
@@ -61,3 +61,56 @@ def list_outdated(workdir: Path) -> list[Outdated]:
             continue
         out.append(Outdated(name=name, current=current, wanted=wanted, latest=latest))
     return sorted(out, key=lambda o: o.name)
+
+
+def _run_npm(cmd: list[str], workdir: Path) -> None:
+    try:
+        proc = subprocess.run(cmd, cwd=workdir, capture_output=True, text=True)
+    except OSError as e:
+        raise FreshnessError(f"npm not available: {e}") from e
+    if proc.returncode != 0:
+        raise FreshnessError(
+            f"{' '.join(cmd)} failed (exit {proc.returncode}): {proc.stderr.strip()}"
+        )
+
+
+_DEP_SECTIONS = ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies")
+
+
+def _bump_manifest(workdir: Path, majors: list[Selection]) -> None:
+    path = workdir / "package.json"
+    try:
+        raw = path.read_text()
+        data = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as e:
+        raise FreshnessError(f"unreadable package.json: {e}") from e
+    text = raw
+    for sel in majors:
+        oldspec = None
+        for section in _DEP_SECTIONS:
+            deps = data.get(section) or {}
+            if sel.name in deps:
+                oldspec = deps[sel.name]
+                break
+        if oldspec is None:
+            continue  # constraint not locatable -> skip this dep
+        needle = f'"{sel.name}": "{oldspec}"'
+        repl = f'"{sel.name}": "^{sel.target}"'
+        if needle in text:
+            text = text.replace(needle, repl, 1)
+    if text != raw:
+        try:
+            path.write_text(text)
+        except OSError as e:
+            raise FreshnessError(f"cannot write package.json: {e}") from e
+
+
+def apply(workdir: Path, selections: list[Selection]) -> None:
+    in_range = [s for s in selections if not s.is_major]
+    majors = [s for s in selections if s.is_major]
+    if in_range:
+        names = [s.name for s in in_range]
+        _run_npm(["npm", "update", *names, "--package-lock-only", "--ignore-scripts"], workdir)
+    if majors:
+        _bump_manifest(workdir, majors)
+        _run_npm(["npm", "install", "--package-lock-only", "--ignore-scripts"], workdir)
