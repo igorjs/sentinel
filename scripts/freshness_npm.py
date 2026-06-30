@@ -17,6 +17,8 @@ def _lock_versions(workdir: Path) -> dict[str, str]:
         data = json.loads((workdir / "package-lock.json").read_text())
     except (OSError, json.JSONDecodeError) as e:
         raise FreshnessError(f"unreadable package-lock.json: {e}") from e
+    if not isinstance(data, dict):
+        raise FreshnessError("package-lock.json: unexpected root type")
     out: dict[str, str] = {}
     for path, info in (data.get("packages") or {}).items():
         if path.startswith("node_modules/") and isinstance(info, dict) and info.get("version"):
@@ -43,6 +45,8 @@ def list_outdated(workdir: Path) -> list[Outdated]:
         data = json.loads(text)
     except json.JSONDecodeError as e:
         raise FreshnessError(f"npm outdated returned non-JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise FreshnessError("npm outdated: unexpected root type")
     lockv = _lock_versions(workdir)
     out: list[Outdated] = []
     for name, info in data.items():
