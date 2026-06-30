@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 import scripts.freshness_npm as N
-from scripts.freshness import FreshnessError, Outdated
+from scripts.freshness import FreshnessError, Outdated, Selection
 
 _OUTDATED_JSON = json.dumps(
     {
@@ -104,3 +104,54 @@ def test_list_outdated_workspace_list_shape(tmp_path, monkeypatch):
     )
     out = N.list_outdated(tmp_path)
     assert any(o.name == "pkg" and o.current == "1.0.0" for o in out)
+
+
+def test_apply_in_range_runs_npm_update(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_run(cmd, cwd=None, capture_output=False, text=False):
+        calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    N.apply(tmp_path, [Selection("lodash", "4.17.20", "4.17.21", False)])
+    assert calls == [["npm", "update", "lodash", "--package-lock-only", "--ignore-scripts"]]
+
+
+def test_apply_major_edits_manifest_then_installs(tmp_path, monkeypatch):
+    (tmp_path / "package.json").write_text(
+        json.dumps({"dependencies": {"lodash": "^4.17.0"}}, indent=2)
+    )
+    calls = []
+
+    def fake_run(cmd, cwd=None, capture_output=False, text=False):
+        calls.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    N.apply(tmp_path, [Selection("lodash", "4.17.20", "5.0.0", True)])
+    manifest = (tmp_path / "package.json").read_text()
+    assert '"lodash": "^5.0.0"' in manifest
+    assert ["npm", "install", "--package-lock-only", "--ignore-scripts"] in calls
+
+
+def test_apply_major_unlocatable_constraint_skipped(tmp_path, monkeypatch):
+    (tmp_path / "package.json").write_text(json.dumps({"dependencies": {}}, indent=2))
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+    # no crash, manifest unchanged for the missing dep
+    N.apply(tmp_path, [Selection("ghost", "1.0.0", "2.0.0", True)])
+    assert (tmp_path / "package.json").read_text() == json.dumps({"dependencies": {}}, indent=2)
+
+
+def test_apply_npm_failure_raises(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(returncode=1, stdout="", stderr="boom"),
+    )
+    with pytest.raises(FreshnessError):
+        N.apply(tmp_path, [Selection("lodash", "4.17.20", "4.17.21", False)])
