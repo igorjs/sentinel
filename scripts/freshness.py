@@ -91,13 +91,16 @@ def _body(selections: list[Selection], note: str) -> str:
     return "\n\n".join(parts) + "\n"
 
 
-def _plan(scope: str, selections: list[Selection], adapter, workdir, note: str) -> Plan:
-    if len(selections) == 1:
+def _plan(
+    scope: str, selections: list[Selection], adapter, workdir, note: str, *, per_dep: bool
+) -> Plan:
+    if per_dep:
         key = f"freshness-{selections[0].name}"
         title = f"freshness({scope}): bump {selections[0].name} to {selections[0].target}"
     else:
         key = "freshness"
-        title = f"freshness({scope}): update {len(selections)} dependencies"
+        noun = "dependency" if len(selections) == 1 else "dependencies"
+        title = f"freshness({scope}): update {len(selections)} {noun}"
 
     def _apply(workdir=workdir, selections=selections):
         adapter.apply(workdir, selections)
@@ -145,13 +148,14 @@ def run(workdir, config: Config, *, dry_run: bool, adapter) -> list[Result]:
         return []
     note = _dependabot_note(workdir)
     base_sha = capture_base_sha(workdir) if not dry_run else ""
-    if effective_freshness_group(config, scope) == "dependency":
+    per_dep = effective_freshness_group(config, scope) == "dependency"
+    if per_dep:
         groups = [[s] for s in selections]
     else:
         groups = [selections]
     results: list[Result] = []
     for group in groups:
-        plan = _plan(scope, group, adapter, workdir, note)
+        plan = _plan(scope, group, adapter, workdir, note, per_dep=per_dep)
         try:
             results.append(
                 apply_plan(

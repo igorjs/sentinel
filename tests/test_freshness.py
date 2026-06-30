@@ -11,9 +11,9 @@ _O = [
 
 class _FakeAdapter:
     SCOPE = "javascript"
+    FILES_CHANGED = ("package.json", "package-lock.json")
 
     def __init__(self, outdated, raise_list=False, raise_apply=False):
-        self.FILES_CHANGED = ["package.json", "package-lock.json"]
         self._outdated = outdated
         self._raise_list = raise_list
         self._raise_apply = raise_apply
@@ -113,3 +113,29 @@ def test_run_dependabot_note_in_body(tmp_path, monkeypatch):
     monkeypatch.setattr(F, "apply_plan", fake_apply_plan)
     F.run(tmp_path, _cfg(), dry_run=True, adapter=_FakeAdapter(_O))
     assert "dependabot" in captured["body"].lower()
+
+
+def test_run_apply_failure_opens_issue(tmp_path, monkeypatch):
+    def boom(plan, **kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(F, "apply_plan", boom)
+    results = F.run(tmp_path, _cfg(), dry_run=True, adapter=_FakeAdapter(_O))
+    assert len(results) == 1 and results[0].key == "javascript-freshness"
+
+
+def test_run_grouped_single_selection_uses_scope_branch(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake(plan, **kw):
+        captured["key"] = plan.key
+        captured["branch"] = plan.branch
+        from scripts.models import Result
+
+        return Result(scope=plan.scope, key=plan.key, kind="noop", summary="")
+
+    monkeypatch.setattr(F, "apply_plan", fake)
+    one = [Outdated("lodash", "4.17.20", "4.17.21", "5.0.0")]
+    F.run(tmp_path, _cfg(), dry_run=True, adapter=_FakeAdapter(one))
+    assert captured["key"] == "freshness"
+    assert captured["branch"].endswith("/freshness")
