@@ -151,3 +151,87 @@ def test_lead_days_rejects_bool(tmp_path: Path):
     cfg_path.write_text("[defaults]\nruntime_eol_lead_days = true\n")
     with pytest.raises(ConfigError, match="runtime_eol_lead_days"):
         load_config(cfg_path)
+
+
+def test_freshness_defaults_off(tmp_path):
+    from scripts.config import (
+        effective_freshness_group,
+        effective_freshness_level,
+        freshness_filters,
+        load_config,
+        update_freshness_enabled,
+    )
+
+    cfg = load_config(None)
+    assert update_freshness_enabled(cfg, "javascript") is False
+    assert effective_freshness_level(cfg, "javascript") == "range"
+    assert effective_freshness_group(cfg, "javascript") == "scope"
+    assert freshness_filters(cfg, "javascript") == ([], [])
+
+
+def test_freshness_scope_override(tmp_path):
+    from scripts.config import (
+        effective_freshness_group,
+        effective_freshness_level,
+        freshness_filters,
+        load_config,
+        update_freshness_enabled,
+    )
+
+    p = tmp_path / "sentinel.toml"
+    p.write_text(
+        "[scopes.javascript]\n"
+        "update_freshness = true\n"
+        'freshness_level = "major"\n'
+        'freshness_group = "dependency"\n'
+        'freshness_include = ["lodash"]\n'
+        'freshness_exclude = ["@types/*"]\n'
+    )
+    cfg = load_config(p)
+    assert update_freshness_enabled(cfg, "javascript") is True
+    assert effective_freshness_level(cfg, "javascript") == "major"
+    assert effective_freshness_group(cfg, "javascript") == "dependency"
+    assert freshness_filters(cfg, "javascript") == (["lodash"], ["@types/*"])
+
+
+def test_freshness_defaults_table(tmp_path):
+    from scripts.config import effective_freshness_group, effective_freshness_level, load_config
+
+    p = tmp_path / "sentinel.toml"
+    p.write_text('[defaults]\nfreshness_level = "major"\nfreshness_group = "dependency"\n')
+    cfg = load_config(p)
+    assert effective_freshness_level(cfg, "anything") == "major"
+    assert effective_freshness_group(cfg, "anything") == "dependency"
+
+
+def test_freshness_level_invalid(tmp_path):
+    from scripts.config import ConfigError, load_config
+
+    p = tmp_path / "sentinel.toml"
+    p.write_text('[scopes.javascript]\nfreshness_level = "wild"\n')
+    import pytest
+
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_freshness_group_invalid(tmp_path):
+    from scripts.config import ConfigError, load_config
+
+    p = tmp_path / "sentinel.toml"
+    p.write_text('[scopes.javascript]\nfreshness_group = "weekly"\n')
+    import pytest
+
+    with pytest.raises(ConfigError):
+        load_config(p)
+
+
+def test_freshness_include_must_be_list(tmp_path):
+    from scripts.config import ConfigError, load_config
+
+    p = tmp_path / "sentinel.toml"
+    p.write_text('[scopes.javascript]\nfreshness_include = "lodash"\n')
+    import pytest
+
+    with pytest.raises(ConfigError):
+        load_config(p)
