@@ -16,9 +16,23 @@ _ALLOWED_SCOPE_OVERRIDE = {
     "update_runtime",
     "min_severity",
     "runtime_eol_lead_days",
+    "update_freshness",
+    "freshness_level",
+    "freshness_group",
+    "freshness_include",
+    "freshness_exclude",
 }
 _REQUIRED_CUSTOM = {"name", "kind"}
-_ALLOWED_DEFAULTS = {"pr_labels", "min_severity", "runtime_eol_lead_days"}
+_ALLOWED_DEFAULTS = {
+    "pr_labels",
+    "min_severity",
+    "runtime_eol_lead_days",
+    "freshness_level",
+    "freshness_group",
+}
+
+_FRESHNESS_LEVELS = {"range", "major"}
+_FRESHNESS_GROUPS = {"scope", "dependency"}
 
 # Per-kind required keys (beyond name/kind) for custom scopes. Validated at load
 # time so a misconfigured scope fails loud here instead of with a bare KeyError
@@ -43,6 +57,18 @@ def _validate_lead_days(value: Any, *, where: str) -> int:
     return value
 
 
+def _validate_choice(value: Any, allowed: set[str], *, where: str) -> str:
+    if value not in allowed:
+        raise ConfigError(f"{where} must be one of {sorted(allowed)}, got {value!r}")
+    return value
+
+
+def _validate_str_list(value: Any, *, where: str) -> list[str]:
+    if not (isinstance(value, list) and all(isinstance(x, str) for x in value)):
+        raise ConfigError(f"{where} must be a list of strings, got {value!r}")
+    return list(value)
+
+
 @dataclass
 class ScopeOverride:
     enabled: bool = True
@@ -50,6 +76,11 @@ class ScopeOverride:
     update_runtime: bool = False
     min_severity: str | None = None
     runtime_eol_lead_days: int | None = None
+    update_freshness: bool = False
+    freshness_level: str | None = None
+    freshness_group: str | None = None
+    freshness_include: list[str] = field(default_factory=list)
+    freshness_exclude: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -64,6 +95,8 @@ class Defaults:
     pr_labels: list[str] = field(default_factory=lambda: ["dependencies", "automated"])
     min_severity: str | None = None
     runtime_eol_lead_days: int = 30
+    freshness_level: str = "range"
+    freshness_group: str = "scope"
 
 
 @dataclass
@@ -93,12 +126,39 @@ def load_config(path: Path | None) -> Config:
         lead = spec.get("runtime_eol_lead_days")
         if lead is not None:
             lead = _validate_lead_days(lead, where=f"scopes.{name}")
+        f_level = spec.get("freshness_level")
+        if f_level is not None:
+            f_level = _validate_choice(
+                f_level, _FRESHNESS_LEVELS, where=f"scopes.{name}.freshness_level"
+            )
+        f_group = spec.get("freshness_group")
+        if f_group is not None:
+            f_group = _validate_choice(
+                f_group, _FRESHNESS_GROUPS, where=f"scopes.{name}.freshness_group"
+            )
+        f_include = spec.get("freshness_include")
+        f_include = (
+            _validate_str_list(f_include, where=f"scopes.{name}.freshness_include")
+            if f_include is not None
+            else []
+        )
+        f_exclude = spec.get("freshness_exclude")
+        f_exclude = (
+            _validate_str_list(f_exclude, where=f"scopes.{name}.freshness_exclude")
+            if f_exclude is not None
+            else []
+        )
         cfg.scopes[name] = ScopeOverride(
             enabled=bool(spec.get("enabled", True)),
             gomod_path=spec.get("gomod_path"),
             update_runtime=bool(spec.get("update_runtime", False)),
             min_severity=min_sev,
             runtime_eol_lead_days=lead,
+            update_freshness=bool(spec.get("update_freshness", False)),
+            freshness_level=f_level,
+            freshness_group=f_group,
+            freshness_include=f_include,
+            freshness_exclude=f_exclude,
         )
 
     for i, raw in enumerate(data.get("custom") or []):
@@ -139,6 +199,16 @@ def load_config(path: Path | None) -> Config:
         lead = defaults.get("runtime_eol_lead_days")
         if lead is not None:
             cfg.defaults.runtime_eol_lead_days = _validate_lead_days(lead, where="defaults")
+        d_level = defaults.get("freshness_level")
+        if d_level is not None:
+            cfg.defaults.freshness_level = _validate_choice(
+                d_level, _FRESHNESS_LEVELS, where="defaults.freshness_level"
+            )
+        d_group = defaults.get("freshness_group")
+        if d_group is not None:
+            cfg.defaults.freshness_group = _validate_choice(
+                d_group, _FRESHNESS_GROUPS, where="defaults.freshness_group"
+            )
 
     return cfg
 
@@ -160,6 +230,32 @@ def effective_runtime_eol_lead_days(config: Config, scope: str) -> int:
     if override and override.runtime_eol_lead_days is not None:
         return override.runtime_eol_lead_days
     return config.defaults.runtime_eol_lead_days
+
+
+def update_freshness_enabled(config: Config, scope: str) -> bool:
+    override = config.scopes.get(scope)
+    return override.update_freshness if override else False
+
+
+def effective_freshness_level(config: Config, scope: str) -> str:
+    override = config.scopes.get(scope)
+    if override and override.freshness_level is not None:
+        return override.freshness_level
+    return config.defaults.freshness_level
+
+
+def effective_freshness_group(config: Config, scope: str) -> str:
+    override = config.scopes.get(scope)
+    if override and override.freshness_group is not None:
+        return override.freshness_group
+    return config.defaults.freshness_group
+
+
+def freshness_filters(config: Config, scope: str) -> tuple[list[str], list[str]]:
+    override = config.scopes.get(scope)
+    if not override:
+        return [], []
+    return list(override.freshness_include), list(override.freshness_exclude)
 
 
 def _reject_unknown(data: dict, allowed: set[str], *, where: str) -> None:
