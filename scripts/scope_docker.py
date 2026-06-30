@@ -159,7 +159,7 @@ def _today() -> date:
 def _plan(workdir: Path, edits: list[dict]) -> Plan:
     files = sorted({e["file"] for e in edits})
     bullets = "\n".join(
-        f"- `{e['file']}`: `{e['old'].strip()}` → `{e['new'].strip()}`" for e in edits
+        f"- `{e['file']}`: `{e['old'].strip()}` -> `{e['new'].strip()}`" for e in edits
     )
     title = "runtime(docker): raise end-of-life base image(s)"
     body = (

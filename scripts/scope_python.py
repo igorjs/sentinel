@@ -1,5 +1,5 @@
 """python scope: bump PyPI deps when OSV reports a fixable advisory.
-Detects lockfile to pick poetry/uv/pipenv. No lockfile → issue fallback."""
+Detects lockfile to pick poetry/uv/pipenv. No lockfile -> issue fallback."""
 
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str, *, clean_suppressions: b
         f"Closes [{drift.key}](https://osv.dev/{drift.key}).\n\n"
         f"**Advisory:** {drift.summary}\n\n"
         f"{severity_line(drift.severity)}\n\n"
-        f"**Bump:** `{module}` → {fix} (via {pkg_manager})\n\n"
+        f"**Bump:** `{module}` -> {fix} (via {pkg_manager})\n\n"
         f"Opened automatically by [sentinel]"
         f"(https://github.com/igorjs/sentinel).\n"
     )

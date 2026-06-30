@@ -5,28 +5,34 @@ across rust, go, javascript, python, and custom upstream-release pins.
 Self-cleans `osv-scanner.toml` / `deny.toml` ignore lists when bumps
 retire their entries.
 
-**Status:** v1 — production-ready for the four built-in language scopes
-and the `gh-release-pin` custom scope. v2 adds Docker / pre-commit / npm-engine bumps.
+Status: production-ready for the four built-in language scopes (`rust`, `go`,
+`javascript`, `python`), the `gh-release-pin` custom scope, and the opt-in
+`docker` and `ci` runtime-EOL scopes.
 
 ## What sentinel does (and doesn't)
 
-- ✅ Bumps cargo deps when OSV reports a fix is available
-- ✅ Bumps go module deps + optionally the `go <version>` runtime directive
-- ✅ Bumps npm deps via npm/pnpm/yarn (lockfile-detected)
-- ✅ Bumps PyPI deps via poetry/uv/pipenv (lockfile-detected)
-- ✅ Bumps pinned vendor versions when upstream cuts a new release
-- ✅ Removes ignore entries from `osv-scanner.toml` / `deny.toml` when bumps close them
-- ❌ Auto-merging PRs (every PR is reviewed by a human)
-- ❌ Routine "is there a newer version?" freshness bumps (that's Dependabot's job)
+Does:
 
-Sentinel overlaps with Dependabot's *security updates* — both bump to the
-minimum version that closes an advisory — and complements them. Sentinel adds
-what Dependabot doesn't: OSV's broader advisory coverage (RUSTSEC, Go, and PyPI
+- Bumps cargo deps when OSV reports a fix is available
+- Bumps go module deps, and optionally the `go <version>` runtime directive
+- Bumps npm deps via npm/pnpm/yarn (lockfile-detected)
+- Bumps PyPI deps via poetry/uv/pipenv (lockfile-detected)
+- Bumps pinned vendor versions when upstream cuts a new release
+- Removes ignore entries from `osv-scanner.toml` / `deny.toml` when bumps close them
+
+Doesn't:
+
+- Auto-merge PRs (every PR gets a human review)
+- Routine "is there a newer version?" freshness bumps (that's Dependabot's job)
+
+Sentinel overlaps with Dependabot's security updates (both bump to the minimum
+version that closes an advisory) and complements them. Sentinel adds what
+Dependabot doesn't: OSV's broader advisory coverage (RUSTSEC, Go, and PyPI
 natively, not only the GitHub Advisory Database), language-runtime pins (the `go`
 directive), vendored `gh-release-pin` artefacts, self-cleaning of
 `osv-scanner.toml` / `deny.toml` suppression lists, and a configurable
-`min_severity` gate. It deliberately leaves routine "is there a newer version?"
-freshness bumps to Dependabot's version updates.
+`min_severity` gate. It leaves routine "is there a newer version?" freshness
+bumps to Dependabot's version updates.
 
 ## Quick start
 
@@ -143,9 +149,9 @@ independent of `min_severity`.
 Set `update_runtime = true` on a `docker` scope to scan Dockerfiles
 (`Dockerfile`, `Dockerfile.*`, `*.Dockerfile`, recursively) and open a PR raising
 end-of-life official `python` / `node` base-image tags to the oldest still-supported
-version (e.g. `FROM python:3.8-slim` → `FROM python:3.9-slim`). The variant suffix
-(`-slim`, `-alpine`, `-bookworm`, …) is preserved. Digest-pinned bases
-(`python:3.8@sha256:…`) are reported in an issue instead of edited. EOL dates come
+version (e.g. `FROM python:3.8-slim` -> `FROM python:3.9-slim`). The variant suffix
+(`-slim`, `-alpine`, `-bookworm`, ...) is preserved. Digest-pinned bases
+(`python:3.8@sha256:...`) are reported in an issue instead of edited. EOL dates come
 from endoflife.date.
 
 `runtime_eol_lead_days` (default `30`, per-scope or under `[defaults]`) opens the
@@ -156,33 +162,33 @@ When a floor bump touches `requires-python` or `engines.node`, sentinel also ref
 
 Set `update_runtime = true` on a `ci` scope to scan `.github/workflows/*.yml` and
 open a PR replacing end-of-life `python-version` / `node-version` matrix entries with
-the oldest still-supported version (e.g. `python-version: ["3.8", "3.10"]` →
+the oldest still-supported version (e.g. `python-version: ["3.8", "3.10"]` ->
 `["3.9", "3.10"]`). EOL entries are dropped when supported versions remain, an all-EOL
 list collapses to the oldest supported (never empty), and quoting/comments are
 preserved. EOL dates come from endoflife.date.
 
-When `update_runtime` is enabled for `ci`, sentinel also bumps end-of-life **runner OS** labels in `runs-on:` and `strategy.matrix.os:` (Ubuntu, macOS, Windows) to the oldest version still in vendor support (source: endoflife.date). Suffixes like `-arm` / `-large` are preserved; `*-latest` and `${{ ... }}` expressions are left untouched. Note: this tracks the OS vendor's end-of-life, which for Windows Server can lag GitHub's runner-image removal.
+When `update_runtime` is enabled for `ci`, sentinel also bumps end-of-life runner OS labels in `runs-on:` and `strategy.matrix.os:` (Ubuntu, macOS, Windows) to the oldest version still in vendor support (source: endoflife.date). Suffixes like `-arm` / `-large` are preserved; `*-latest` and `${{ ... }}` expressions are left untouched. Note: this tracks the OS vendor's end-of-life, which for Windows Server lags GitHub's runner-image removal.
 
 ## Suppression recovery
 
 `osv-scanner` hides advisories listed in `osv-scanner.toml`'s `IgnoredVulns`, so
 sentinel runs a second scan that bypasses that ignore list. If an advisory you
 suppressed (e.g. when no fix existed) now has a fix, sentinel opens a normal
-bump PR for it — and the `rust` scope's PR also strips the now-removable
+bump PR for it, and the `rust` scope's PR also strips the now-removable
 `osv-scanner.toml` / `deny.toml` entry. As with every sentinel PR, a human
-reviews it, so a deliberately-kept suppression can simply be declined.
+reviews it, so a deliberately-kept suppression can be declined.
 
 ## How sentinel differs from Dependabot
 
-Dependabot already does CVE-driven *security updates* to the minimum patched
+Dependabot already does CVE-driven security updates to the minimum patched
 version. Sentinel overlaps there and differs on the rest:
 
 | Dimension | Dependabot | sentinel |
 |---|---|---|
 | Advisory source | GitHub Advisory Database | OSV (RUSTSEC, Go, PyPI, npm, crates.io, ...) |
-| Version (freshness) updates | Yes — picks latest | No — left to Dependabot |
-| Security updates | Yes — minimum patched version | Yes — minimum version that closes the OSV advisory |
-| Beyond dep versions | — | Language runtime pins + `gh-release-pin` vendor pins |
+| Version (freshness) updates | Yes, picks latest | No, left to Dependabot |
+| Security updates | Yes, minimum patched version | Yes, minimum version that closes the OSV advisory |
+| Beyond dep versions | None | Language runtime pins + `gh-release-pin` vendor pins |
 | Suppression lists | Manual `dependabot.yml` block | Reads + self-cleans `osv-scanner.toml` / `deny.toml` |
 | Severity gating | Not configurable per-run | `min_severity` (global + per-scope) |
 

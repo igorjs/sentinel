@@ -104,7 +104,7 @@ def _raw_scan(workdir: Path, *, bypass_ignores: bool = False) -> dict[str, Any]:
     if result.returncode == 128:
         # osv-scanner exit 128 = "no package sources found": the scope resolved
         # (e.g. a pyproject.toml exists) but there's no lockfile/manifest to scan.
-        # That's benign — nothing to scan means no advisories, not a failure.
+        # That's benign: nothing to scan means no advisories, not a failure.
         return {"results": []}
     if result.returncode not in (0, 1):
         raise RuntimeError(f"osv-scanner failed (exit {result.returncode}): {result.stderr}")

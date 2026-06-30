@@ -130,7 +130,7 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     title=f"sentinel: rust bump blocked for {drift.key}",
                     body=(
                         f"`cargo update --precise` failed for "
-                        f"`{drift.raw['package']}` → "
+                        f"`{drift.raw['package']}` -> "
                         f"`{drift.fixed_versions[0]}`. Exit code {e.returncode}.\n\n"
                         "A parent dep range likely pins the affected crate. "
                         "Manual bump required."
@@ -164,7 +164,7 @@ def _pr_body(drift: Drift, fix: str) -> str:
         f"**Advisory:** {drift.summary}\n\n"
         f"{severity_line(drift.severity)}\n\n"
         f"**Bump:** `{drift.raw['package']}` "
-        f"{drift.current} → {fix}\n\n"
+        f"{drift.current} -> {fix}\n\n"
         f"Opened automatically by [sentinel]"
         f"(https://github.com/igorjs/sentinel).\n"
     )

@@ -106,7 +106,7 @@ def test_run_skips_below_threshold(tmp_path, capsys):
     cfg = Config()
     cfg.defaults.min_severity = "high"
     results = run(tmp_path, cfg, osv, dry_run=True)
-    assert results == []  # low < high → skipped
+    assert results == []  # low < high -> skipped
     assert "skipped 1" in capsys.readouterr().out
 
 
@@ -173,7 +173,7 @@ def test_run_skips_below_threshold_v2_groups(tmp_path, capsys):
 
 
 def _osv_no_severity():
-    # Advisory with no severity data → derive_severity → "unknown".
+    # Advisory with no severity data -> derive_severity -> "unknown".
     return OsvCache(
         {
             "results": [
@@ -266,7 +266,7 @@ def _osv_two_crates_one_advisory():
 
 
 def test_run_dedups_suppression_cleanup_across_siblings(tmp_path, capsys):
-    # One advisory affecting two crates → two PRs, but only ONE strips the
+    # One advisory affecting two crates -> two PRs, but only ONE strips the
     # shared osv-scanner.toml suppression (no redundant/competing ignore edits).
     (tmp_path / "Cargo.lock").write_text(
         '[[package]]\nname = "crate-a"\nversion = "1.0.0"\n\n'

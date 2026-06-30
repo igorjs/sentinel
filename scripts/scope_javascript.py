@@ -1,5 +1,5 @@
 """javascript scope: bump npm deps when OSV reports a fixable advisory.
-Detects lockfile to pick npm/pnpm/yarn. No lockfile → issue fallback."""
+Detects lockfile to pick npm/pnpm/yarn. No lockfile -> issue fallback."""
 
 from __future__ import annotations
 
@@ -93,7 +93,7 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str, *, clean_suppressions: b
         f"Closes [{drift.key}](https://osv.dev/{drift.key}).\n\n"
         f"**Advisory:** {drift.summary}\n\n"
         f"{severity_line(drift.severity)}\n\n"
-        f"**Bump:** `{module}` → {fix} (via {pkg_manager})\n\n"
+        f"**Bump:** `{module}` -> {fix} (via {pkg_manager})\n\n"
         f"Opened automatically by [sentinel]"
         f"(https://github.com/igorjs/sentinel).\n"
     )
@@ -116,7 +116,7 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
     results: list[Result] = runtime.runtime_results(workdir, config, SCOPE, dry_run=dry_run)
     pm = detect_pkg_manager(workdir)
     if pm is None:
-        # No lockfile → can't safely auto-bump
+        # No lockfile -> can't safely auto-bump
         any_fixable = detect(workdir, osv)
         if not any_fixable:
             return results

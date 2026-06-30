@@ -29,7 +29,7 @@ def test_real_scan_parses_and_detects_known_advisory(tmp_path):
     cache = OsvCache.scan(tmp_path)  # real osv-scanner, real network
     drifts = detect(tmp_path, cache)
 
-    assert drifts, "real osv-scanner output produced no drifts — parsing likely broke"
+    assert drifts, "real osv-scanner output produced no drifts, parsing likely broke"
     jinja = [d for d in drifts if d.raw["module"].lower() == "jinja2"]
     assert jinja, f"expected a jinja2 drift, got modules {[d.raw['module'] for d in drifts]}"
     assert jinja[0].fixed_versions, "advisory parsed without a fixed version"

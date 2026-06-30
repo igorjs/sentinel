@@ -27,7 +27,7 @@ def test_is_safe_arg_accepts_legitimate_tokens(value):
     "value",
     [
         "",
-        "-rf",  # leading dash → argument injection
+        "-rf",  # leading dash -> argument injection
         "--config=/etc/passwd",
         "-O/tmp/x",
         "foo bar",  # whitespace
