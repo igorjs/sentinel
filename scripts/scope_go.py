@@ -123,7 +123,7 @@ def plan_module(
         f"Closes [{drift.key}](https://osv.dev/{drift.key}).\n\n"
         f"**Advisory:** {drift.summary}\n\n"
         f"{severity_line(drift.severity)}\n\n"
-        f"**Bump:** `{module}` → {fix}\n\n"
+        f"**Bump:** `{module}` -> {fix}\n\n"
         f"Opened automatically by [sentinel]"
         f"(https://github.com/igorjs/sentinel).\n"
     )

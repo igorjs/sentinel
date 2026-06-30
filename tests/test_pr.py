@@ -83,7 +83,7 @@ def test_issue_dedup_enumerates_by_label_not_fuzzy_search(tmp_path, monkeypatch)
     list_cmd = calls[0]
     assert "--label" in list_cmd and "sentinel" in list_cmd  # direct, consistent listing
     assert "--search" not in list_cmd  # not the eventually-consistent fuzzy index
-    assert not any("create" in c for c in calls)  # exact title already open → no dupe
+    assert not any("create" in c for c in calls)  # exact title already open -> no dupe
     assert result.kind == "noop"
 
 

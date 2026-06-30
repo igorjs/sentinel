@@ -329,7 +329,7 @@ def detect_runtime_drift(
         return None
     summary = (
         "raise end-of-life runtime: "
-        + ", ".join(f"{e['label']} {e['current']}→{e['new']}" for e in edits)
+        + ", ".join(f"{e['label']} {e['current']}->{e['new']}" for e in edits)
         if edits
         else "end-of-life runtime detected (manual review)"
     )
@@ -401,7 +401,7 @@ def runtime_plan(workdir: Path, drift: Drift, scope: str) -> Plan:
                 files.append(lockfile)
                 refreshed.append(lockfile)
 
-    bullets = "\n".join(f"- `{e['file']}`: `{e['current']}` → `{e['new']}`" for e in edits)
+    bullets = "\n".join(f"- `{e['file']}`: `{e['current']}` -> `{e['new']}`" for e in edits)
     refresh_note = (
         f"\nLockfile(s) refreshed: {', '.join(f'`{f}`' for f in refreshed)}.\n" if refreshed else ""
     )

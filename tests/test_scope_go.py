@@ -65,7 +65,7 @@ def test_plan_runtime_edits_directive(workdir: Path, fixtures_dir: Path):
 def test_module_drift_sets_severity(workdir: Path, fixtures_dir: Path):
     osv = from_fixture(fixtures_dir / "osv_go_deps.json")
     drifts = detect_module_drifts(workdir, osv, workdir / "go.mod")
-    # Fixture carries no severity data → unknown (fail-open).
+    # Fixture carries no severity data -> unknown (fail-open).
     assert drifts[0].severity == "unknown"
 
 
@@ -84,7 +84,7 @@ def _stdlib_adv(adv_id, fixed, vector):
 
 
 def test_runtime_drift_severity_is_max_of_contributors(workdir: Path):
-    # Two stdlib advisories at different severities (low + high) → runtime drift
+    # Two stdlib advisories at different severities (low + high) -> runtime drift
     # takes the MAX. go.mod fixture is `go 1.24.4`, so both fixes are >= current.
     osv = OsvCache(
         {

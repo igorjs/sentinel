@@ -3,31 +3,31 @@
 ## Supported versions
 
 Sentinel is pre-1.0. Security fixes land on `main` and in the latest `v0.x`
-release. Pin to a released tag (`igorjs/sentinel@v0.1`) or a commit SHA; older
+release. Pin to a released tag (`igorjs/sentinel@v0`) or a commit SHA; older
 tags do not receive backported fixes.
 
 ## Reporting a vulnerability
 
-Please report security issues **privately**, not via public issues or pull
+Please report security issues privately, not via public issues or pull
 requests.
 
-- Use GitHub's private reporting: the repository's **Security** tab →
-  **Report a vulnerability** (GitHub Security Advisories).
+- Use GitHub's private reporting: the repository's Security tab, then
+  Report a vulnerability (GitHub Security Advisories).
 
 Include enough to reproduce: affected version/SHA, a minimal repro, the impact,
 and any suggested fix.
 
 ### What to expect
 
-- Acknowledgement within **5 business days**.
-- An initial assessment (severity, affected versions) within **10 business
-  days**.
+- Acknowledgement within 5 business days.
+- An initial assessment (severity, affected versions) within 10 business
+  days.
 - Coordinated disclosure: we agree on a timeline before any public detail, and
   credit reporters who want it.
 
 ## Scope
 
-In scope: the action itself — the Python in `scripts/`, the composite actions
+In scope: the action itself, the Python in `scripts/`, the composite actions
 (`action.yml`, `discover/action.yml`), how it invokes `osv-scanner` / `gh` /
 package managers, and how advisory data flows into commands, branches, and PRs.
 
