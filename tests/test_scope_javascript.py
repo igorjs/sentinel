@@ -228,3 +228,25 @@ def test_run_no_runtime_pr_by_default(tmp_path):
     (tmp_path / "package.json").write_text('{"name": "x", "engines": {"node": ">=18"}}')
     results = run(tmp_path, Config(), _empty_osv(), dry_run=True)
     assert [r for r in results if r.key == "runtime-eol"] == []
+
+
+def test_run_includes_freshness_results(tmp_path, monkeypatch):
+    import scripts.scope_javascript as sj
+    from scripts.config import Config, ScopeOverride
+    from scripts.models import Result
+
+    (tmp_path / "package.json").write_text('{"name":"x"}')
+
+    sentinel = Result(scope="javascript", key="freshness", kind="noop", summary="")
+    monkeypatch.setattr(
+        sj.freshness, "run", lambda workdir, config, *, dry_run, adapter: [sentinel]
+    )
+    # no lockfile -> security path is a no-op; freshness result still present
+    cfg = Config(scopes={"javascript": ScopeOverride(update_freshness=True)})
+
+    class _Osv:
+        def fixable_advisories(self, eco):
+            return []
+
+    results = sj.run(tmp_path, cfg, _Osv(), dry_run=True)
+    assert sentinel in results

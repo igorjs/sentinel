@@ -169,6 +169,24 @@ preserved. EOL dates come from endoflife.date.
 
 When `update_runtime` is enabled for `ci`, sentinel also bumps end-of-life runner OS labels in `runs-on:` and `strategy.matrix.os:` (Ubuntu, macOS, Windows) to the oldest version still in vendor support (source: endoflife.date). Suffixes like `-arm` / `-large` are preserved; `*-latest` and `${{ ... }}` expressions are left untouched. Note: this tracks the OS vendor's end-of-life, which for Windows Server lags GitHub's runner-image removal.
 
+## Version freshness (opt-in)
+
+Set `update_freshness = true` on the `javascript` scope to open PRs that bump
+outdated npm deps to the newest version within their declared range (the npm
+"wanted"). This is opt-in and off by default; it runs separately from security
+bumps, on the `sentinel/javascript/freshness` branch.
+
+- `freshness_level`: `range` (default) bumps within the declared constraint;
+  `major` also crosses the range to the absolute latest, editing the constraint.
+- `freshness_group`: `scope` (default) puts all bumps in one PR; `dependency`
+  opens one PR per dep.
+- `freshness_include` / `freshness_exclude`: dependency-name globs to scope which
+  deps are touched (exclude wins). Use these to avoid overlap with Dependabot.
+
+If `.github/dependabot.yml` exists, the PR notes that Dependabot is also active.
+Freshness is independent of `min_severity`. Slice 1 covers npm; pnpm/yarn and the
+other ecosystems follow.
+
 ## Suppression recovery
 
 `osv-scanner` hides advisories listed in `osv-scanner.toml`'s `IgnoredVulns`, so
