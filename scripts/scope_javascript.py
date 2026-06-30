@@ -6,7 +6,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from scripts import runtime
+from scripts import freshness, freshness_npm, runtime
 from scripts.config import Config, effective_min_severity
 from scripts.models import Drift, Plan, Result
 from scripts.osv import OsvCache
@@ -114,6 +114,7 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
     if not (workdir / "package.json").exists():
         return []
     results: list[Result] = runtime.runtime_results(workdir, config, SCOPE, dry_run=dry_run)
+    results.extend(freshness.run(workdir, config, dry_run=dry_run, adapter=freshness_npm))
     pm = detect_pkg_manager(workdir)
     if pm is None:
         # No lockfile -> can't safely auto-bump
