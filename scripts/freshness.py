@@ -119,12 +119,17 @@ def _plan(
     )
 
 
-def _issue(scope: str, detail: str, *, dry_run: bool, workdir) -> Result:
+def _issue(scope: str, detail: str, *, dry_run: bool, workdir, label: str | None = None) -> Result:
+    # open_issue_fallback dedups by issue title, so per-dep failures must carry a
+    # distinct title (and key) or they collapse into one issue. `label` names the
+    # single dep in per-dep mode; None keeps the generic scope-wide title.
+    suffix = f" for {label}" if label else ""
+    key = f"{scope}-freshness" + (f"-{label}" if label else "")
     return open_issue_fallback(
         scope=scope,
-        key=f"{scope}-freshness",
-        title=f"sentinel: {scope} freshness update failed",
-        body=f"Freshness update could not be applied: {detail}. Bump manually.",
+        key=key,
+        title=f"sentinel: {scope} freshness update failed{suffix}",
+        body=f"Freshness update could not be applied{suffix}: {detail}. Bump manually.",
         dry_run=dry_run,
         workdir=workdir,
     )
@@ -173,5 +178,6 @@ def run(workdir, config: Config, *, dry_run: bool, adapter, base_sha: str = "") 
                 )
             )
         except (subprocess.CalledProcessError, OSError, FreshnessError) as e:
-            results.append(_issue(scope, str(e), dry_run=dry_run, workdir=workdir))
+            label = group[0].name if per_dep else None
+            results.append(_issue(scope, str(e), dry_run=dry_run, workdir=workdir, label=label))
     return results
