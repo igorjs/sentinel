@@ -124,6 +124,36 @@ def test_run_apply_failure_opens_issue(tmp_path, monkeypatch):
     assert len(results) == 1 and results[0].key == "javascript-freshness"
 
 
+def test_run_per_dep_apply_failures_get_distinct_issues(tmp_path, monkeypatch):
+    # In per-dep mode each failed dep must open its OWN issue. open_issue_fallback
+    # dedups by issue TITLE, so a fixed per-scope title would collapse every
+    # failure into a single issue naming only one dep. Keys (and titles) must
+    # carry the dep name.
+    def boom(plan, **kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(F, "apply_plan", boom)
+    results = F.run(
+        tmp_path, _cfg(freshness_group="dependency"), dry_run=True, adapter=_FakeAdapter(_O)
+    )
+    keys = sorted(r.key for r in results)
+    assert keys == [
+        "javascript-freshness-@types/node",
+        "javascript-freshness-express",
+        "javascript-freshness-lodash",
+    ]
+
+
+def test_run_grouped_apply_failure_uses_scope_key(tmp_path, monkeypatch):
+    # Grouped mode is a single PR, so its failure stays on the generic scope key.
+    def boom(plan, **kw):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(F, "apply_plan", boom)
+    results = F.run(tmp_path, _cfg(), dry_run=True, adapter=_FakeAdapter(_O))
+    assert len(results) == 1 and results[0].key == "javascript-freshness"
+
+
 def test_run_grouped_single_selection_uses_scope_branch(tmp_path, monkeypatch):
     captured = {}
 
