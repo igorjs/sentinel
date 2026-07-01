@@ -85,6 +85,7 @@ def _bump_manifest(workdir: Path, majors: list[Selection]) -> None:
     except (OSError, json.JSONDecodeError) as e:
         raise FreshnessError(f"unreadable package.json: {e}") from e
     text = raw
+    unlocatable: list[str] = []
     for sel in majors:
         oldspec = None
         for section in _DEP_SECTIONS:
@@ -92,12 +93,19 @@ def _bump_manifest(workdir: Path, majors: list[Selection]) -> None:
             if sel.name in deps:
                 oldspec = deps[sel.name]
                 break
-        if oldspec is None:
-            continue  # constraint not locatable -> skip this dep
-        needle = f'"{sel.name}": "{oldspec}"'
+        needle = f'"{sel.name}": "{oldspec}"' if oldspec is not None else None
+        if needle is None or needle not in text:
+            # No manifest constraint to edit -> `npm install` won't cross the
+            # major. Record it and fail closed below rather than silently
+            # emitting a PR that claims a bump that never happened.
+            unlocatable.append(sel.name)
+            continue
         repl = f'"{sel.name}": "^{sel.target}"'
-        if needle in text:
-            text = text.replace(needle, repl, 1)
+        text = text.replace(needle, repl, 1)
+    if unlocatable:
+        raise FreshnessError(
+            "cannot locate manifest constraint for major bump(s): " + ", ".join(sorted(unlocatable))
+        )
     if text != raw:
         try:
             path.write_text(text)
