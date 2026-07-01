@@ -135,16 +135,32 @@ def test_apply_major_edits_manifest_then_installs(tmp_path, monkeypatch):
     assert ["npm", "install", "--package-lock-only", "--ignore-scripts"] in calls
 
 
-def test_apply_major_unlocatable_constraint_skipped(tmp_path, monkeypatch):
+def test_apply_major_unlocatable_constraint_raises(tmp_path, monkeypatch):
+    # A major whose constraint is not in any dependency section cannot be bumped
+    # in the manifest, so `npm install` would silently NOT cross the major. Fail
+    # closed (raise) rather than emit a PR that claims a bump that never happened.
     (tmp_path / "package.json").write_text(json.dumps({"dependencies": {}}, indent=2))
     monkeypatch.setattr(
         subprocess,
         "run",
         lambda *a, **k: SimpleNamespace(returncode=0, stdout="", stderr=""),
     )
-    # no crash, manifest unchanged for the missing dep
-    N.apply(tmp_path, [Selection("ghost", "1.0.0", "2.0.0", True)])
-    assert (tmp_path / "package.json").read_text() == json.dumps({"dependencies": {}}, indent=2)
+    with pytest.raises(FreshnessError, match="ghost"):
+        N.apply(tmp_path, [Selection("ghost", "1.0.0", "2.0.0", True)])
+
+
+def test_apply_major_needle_mismatch_raises(tmp_path, monkeypatch):
+    # Constraint present in parsed JSON but the exact `"name": "spec"` string is
+    # absent from the raw text (compact, no space after the colon). The old code
+    # silently skipped the replacement; fail closed instead of over-claiming.
+    (tmp_path / "package.json").write_text('{"dependencies":{"lodash":"^4.17.0"}}')
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+    with pytest.raises(FreshnessError, match="lodash"):
+        N.apply(tmp_path, [Selection("lodash", "4.17.20", "5.0.0", True)])
 
 
 def test_apply_npm_failure_raises(tmp_path, monkeypatch):
