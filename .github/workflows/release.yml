@@ -1,0 +1,162 @@
+# SPDX-License-Identifier: Apache-2.0
+# Managed by github.com/igorjs-iac/repo-config
+#
+# Templated by repo-config/modules/hardened-repo/main.tf (variable
+# manage_workflow_release with release_profile = "action"). Direct edits in
+# the consuming repo are overwritten on the next apply against repo-config.
+#
+# Standardized release for GitHub Actions (git-ref + Marketplace shipping).
+# workflow_dispatch only: the operator supplies the version; the bot-privileged
+# job renders the changelog, cuts the vX.Y.Z tag, publishes a GitHub Release
+# with a build-provenance attestation over the source tarball, and moves the
+# vMAJOR tag for stable releases. No package-registry publish.
+#
+# Requirements on the consuming repo (see docs/action-release-flavor.md):
+#   - protect_tag_pattern = "v*" and manage_bot_app_secrets (or org secrets)
+#   - GitHub Immutable Releases DISABLED (moving vMAJOR needs mutable tags)
+#   - Marketplace branding: in action.yml (first publish is a manual UI step)
+
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, semver WITHOUT leading v (e.g. 1.0.0 or 1.2.0-rc.1)."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            github.com:443
+            objects.githubusercontent.com:443
+            uploads.github.com:443
+            release-assets.githubusercontent.com:443
+            codeload.github.com:443
+            fulcio.sigstore.dev:443
+            rekor.sigstore.dev:443
+            tuf-repo-cdn.sigstore.dev:443
+
+      # Bot App token: bypasses the branch + release_tags rulesets so the job
+      # can push the changelog commit to main and create/move protected v* tags.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.BOT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Validate version and guard against re-release
+        id: v
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          if ! echo "${VERSION}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::version must be semver without leading v (got '${VERSION}')"; exit 1
+          fi
+          TAG="v${VERSION}"
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "::error::tag ${TAG} already exists; refusing to clobber"; exit 1
+          fi
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "::error::release ${TAG} already exists; refusing to clobber"; exit 1
+          fi
+          MAJOR="v$(echo "${VERSION}" | cut -d. -f1)"
+          PRERELEASE=false
+          case "${VERSION}" in *-*) PRERELEASE=true ;; esac
+          {
+            echo "version=${VERSION}"
+            echo "tag=${TAG}"
+            echo "major=${MAJOR}"
+            echo "prerelease=${PRERELEASE}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure git identity (bot)
+        run: |
+          set -euo pipefail
+          git config user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
+          git config user.email '${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+      - name: Render changelog + release notes
+        uses: orhun/git-cliff-action@98c93442bb05a455a77bee982867857ae748eeea # v4.5.1
+        with:
+          config: cliff.toml
+          args: --tag ${{ steps.v.outputs.tag }} --output CHANGELOG.md
+
+      - name: Extract this version's notes
+        uses: orhun/git-cliff-action@98c93442bb05a455a77bee982867857ae748eeea # v4.5.1
+        with:
+          config: cliff.toml
+          args: --tag ${{ steps.v.outputs.tag }} --unreleased --strip all --output RELEASE_NOTES.md
+
+      - name: Commit changelog, tag, push
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.v.outputs.tag }}"
+          if ! git diff --quiet -- CHANGELOG.md; then
+            git add CHANGELOG.md
+            git commit -m "docs(changelog): ${TAG}"
+            git push origin HEAD:"${{ github.ref_name }}"
+          fi
+          git tag -a "${TAG}" -m "${TAG}"
+          git push origin "refs/tags/${TAG}"
+
+      - name: Package source tarball
+        id: pack
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.v.outputs.tag }}"
+          FILE="${{ github.event.repository.name }}-${TAG}.tar.gz"
+          git archive --format=tar.gz --prefix="${TAG}/" -o "${FILE}" "${TAG}"
+          sha256sum "${FILE}" > "${FILE}.sha256"
+          echo "file=${FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: ${{ steps.pack.outputs.file }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b # v3.0.1
+        with:
+          tag_name: ${{ steps.v.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          prerelease: ${{ steps.v.outputs.prerelease }}
+          files: |
+            ${{ steps.pack.outputs.file }}
+            ${{ steps.pack.outputs.file }}.sha256
+          fail_on_unmatched_files: true
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Move major tag (stable only)
+        if: steps.v.outputs.prerelease == 'false'
+        run: |
+          set -euo pipefail
+          git tag -f "${{ steps.v.outputs.major }}" "${{ steps.v.outputs.tag }}"
+          git push -f origin "refs/tags/${{ steps.v.outputs.major }}"
