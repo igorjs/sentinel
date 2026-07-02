@@ -45,14 +45,29 @@ def _push_branch(branch: str, workdir: Path) -> None:
     )
 
 
-def capture_base_sha(workdir: Path) -> str:
-    return subprocess.run(
-        ["git", "rev-parse", "HEAD"],
+def _current_ref(workdir: Path) -> str:
+    """Current branch name, or the commit SHA when HEAD is detached."""
+    r = subprocess.run(
+        ["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
         cwd=workdir,
         capture_output=True,
-        check=True,
         text=True,
+    )
+    ref = r.stdout.strip()
+    if r.returncode == 0 and ref:
+        return ref
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=workdir, capture_output=True, check=True, text=True
     ).stdout.strip()
+
+
+def _restore_ref(ref: str, workdir: Path) -> None:
+    """Return HEAD to ``ref``, discarding the PR branch's working-tree state.
+
+    Best-effort (check=False): a restore failure must not mask an error already
+    propagating out of apply_plan.
+    """
+    subprocess.run(["git", "checkout", "--force", ref], cwd=workdir, check=False)
 
 
 def apply_plan(
@@ -60,7 +75,6 @@ def apply_plan(
     *,
     dry_run: bool,
     workdir: Path,
-    base_sha: str,
     pr_labels: list[str] | None = None,
 ) -> Result:
     if dry_run:
@@ -71,7 +85,18 @@ def apply_plan(
             print(f"[dry-run]   $ {step.__name__}")
         return Result(scope=plan.scope, key=plan.key, kind="noop", summary=f"dry-run: {plan.title}")
 
-    subprocess.run(["git", "switch", "-C", plan.branch, base_sha], cwd=workdir, check=True)
+    # Restore HEAD to the original ref no matter how the apply exits (success,
+    # no-op, or a raised error), so a later pass on the same run branches off a
+    # clean base instead of the PR branch this call created.
+    original_ref = _current_ref(workdir)
+    try:
+        return _apply_plan(plan, workdir=workdir, pr_labels=pr_labels)
+    finally:
+        _restore_ref(original_ref, workdir)
+
+
+def _apply_plan(plan: Plan, *, workdir: Path, pr_labels: list[str] | None) -> Result:
+    subprocess.run(["git", "switch", "-C", plan.branch], cwd=workdir, check=True)
 
     for cmd in plan.commands:
         subprocess.run(cmd, cwd=workdir, check=True)

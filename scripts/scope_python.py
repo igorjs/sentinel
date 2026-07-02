@@ -14,7 +14,6 @@ from scripts.osv import OsvCache
 from scripts.pr import (
     apply_plan,
     branch_name,
-    capture_base_sha,
     open_issue_fallback,
     open_unsafe_identifier_issue,
 )
@@ -164,10 +163,6 @@ def _edit_pyproject_pep621(path: Path, module: str, new_version: str) -> None:
 def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     if not _has_python_project(workdir):
         return []
-    # Capture the clean base up front: runtime_results may `git switch -C` onto
-    # its own PR branch and never restore HEAD (pr.apply_plan does not), so a
-    # base captured after it would branch the security PRs off the runtime PR.
-    base_sha = capture_base_sha(workdir) if not dry_run else ""
     results: list[Result] = runtime.runtime_results(workdir, config, SCOPE, dry_run=dry_run)
     pm = detect_pkg_manager(workdir)
     if pm is None:
@@ -215,7 +210,6 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     p,
                     dry_run=dry_run,
                     workdir=workdir,
-                    base_sha=base_sha,
                     pr_labels=config.defaults.pr_labels,
                 )
             )

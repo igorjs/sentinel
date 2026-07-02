@@ -13,7 +13,6 @@ from scripts.osv import OsvCache
 from scripts.pr import (
     apply_plan,
     branch_name,
-    capture_base_sha,
     open_issue_fallback,
     open_unsafe_identifier_issue,
 )
@@ -113,11 +112,8 @@ def plan(workdir: Path, drift: Drift, pkg_manager: str, *, clean_suppressions: b
 def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     if not (workdir / "package.json").exists():
         return []
-    base_sha = capture_base_sha(workdir) if not dry_run else ""
     results: list[Result] = runtime.runtime_results(workdir, config, SCOPE, dry_run=dry_run)
-    results.extend(
-        freshness.run(workdir, config, dry_run=dry_run, adapter=freshness_npm, base_sha=base_sha)
-    )
+    results.extend(freshness.run(workdir, config, dry_run=dry_run, adapter=freshness_npm))
     pm = detect_pkg_manager(workdir)
     if pm is None:
         # No lockfile -> can't safely auto-bump
@@ -165,7 +161,6 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     p,
                     dry_run=dry_run,
                     workdir=workdir,
-                    base_sha=base_sha,
                     pr_labels=config.defaults.pr_labels,
                 )
             )

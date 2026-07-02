@@ -13,7 +13,6 @@ from scripts.osv import OsvCache
 from scripts.pr import (
     apply_plan,
     branch_name,
-    capture_base_sha,
     open_issue_fallback,
     open_unsafe_identifier_issue,
 )
@@ -93,7 +92,6 @@ def plan(workdir: Path, drift: Drift, *, clean_suppressions: bool = True) -> Pla
 
 def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     results: list[Result] = []
-    base_sha = capture_base_sha(workdir) if not dry_run else ""
     threshold = effective_min_severity(config, SCOPE)
     drifts, skipped = gate(detect(workdir, osv), threshold)
     if skipped:
@@ -118,7 +116,6 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     p,
                     dry_run=dry_run,
                     workdir=workdir,
-                    base_sha=base_sha,
                     pr_labels=config.defaults.pr_labels,
                 )
             )

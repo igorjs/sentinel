@@ -10,7 +10,7 @@ from pathlib import Path
 
 from scripts.config import Config, effective_runtime_eol_lead_days, update_runtime_enabled
 from scripts.models import Plan, Result
-from scripts.pr import apply_plan, branch_name, capture_base_sha, open_issue_fallback
+from scripts.pr import apply_plan, branch_name, open_issue_fallback
 from scripts.runtime_eol import (
     RuntimeEolError,
     bump_pin,
@@ -323,14 +323,12 @@ def run(workdir: Path, config: Config, osv: object, *, dry_run: bool) -> list[Re
     edits = scan(workdir, lead_days=lead, today=_today(), fetch=fetch_cycles)
     if not edits:
         return []
-    base_sha = capture_base_sha(workdir) if not dry_run else ""
     try:
         return [
             apply_plan(
                 _plan(edits),
                 dry_run=dry_run,
                 workdir=workdir,
-                base_sha=base_sha,
                 pr_labels=config.defaults.pr_labels,
             )
         ]

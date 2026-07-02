@@ -143,7 +143,6 @@ def test_apply_plan_uses_custom_pr_labels(tmp_path, monkeypatch):
         _plan(),
         dry_run=False,
         workdir=tmp_path,
-        base_sha="abc",
         pr_labels=["security", "automated"],
     )
     create = next(c for c in calls if c[:3] == ["gh", "pr", "create"])
@@ -154,6 +153,39 @@ def test_apply_plan_uses_custom_pr_labels(tmp_path, monkeypatch):
 
 def test_apply_plan_defaults_pr_labels(tmp_path, monkeypatch):
     calls = _fake_apply_subprocess(monkeypatch)
-    pr_mod.apply_plan(_plan(), dry_run=False, workdir=tmp_path, base_sha="abc")
+    pr_mod.apply_plan(_plan(), dry_run=False, workdir=tmp_path)
     create = next(c for c in calls if c[:3] == ["gh", "pr", "create"])
     assert "dependencies" in create and "automated" in create
+
+
+def test_apply_plan_restores_head_to_original_ref(tmp_path, monkeypatch):
+    """apply_plan must leave HEAD on the original ref, not the PR branch.
+
+    Every scope used to pre-capture a clean base before any apply_plan ran,
+    because apply_plan switched to the PR branch and never came back. Once
+    apply_plan restores HEAD itself, a later capture on the same run reads a
+    clean base, so that workaround is no longer needed.
+    """
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[:2] == ["git", "symbolic-ref"]:
+            return subprocess.CompletedProcess(cmd, 0, "main\n", "")
+        if cmd[:3] == ["git", "diff", "--quiet"]:
+            return subprocess.CompletedProcess(cmd, 1, "", "")
+        if cmd[:3] == ["git", "status", "--porcelain"]:
+            return subprocess.CompletedProcess(cmd, 0, " M file.txt\n", "")
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return subprocess.CompletedProcess(cmd, 0, "[]", "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(pr_mod.subprocess, "run", fake_run)
+    pr_mod.apply_plan(_plan(), dry_run=False, workdir=tmp_path)
+
+    switch_idx = next(i for i, c in enumerate(calls) if c[:3] == ["git", "switch", "-C"])
+    restored = any(
+        "main" in c and ("checkout" in c or ("switch" in c and "-C" not in c))
+        for c in calls[switch_idx + 1 :]
+    )
+    assert restored, f"HEAD was not restored to the original ref; calls={calls}"

@@ -12,7 +12,6 @@ from scripts.osv import OsvCache
 from scripts.pr import (
     apply_plan,
     branch_name,
-    capture_base_sha,
     open_issue_fallback,
     open_unsafe_identifier_issue,
 )
@@ -189,7 +188,6 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
     update_runtime = override.update_runtime if override else True
 
     results: list[Result] = []
-    base_sha = capture_base_sha(workdir) if not dry_run else ""
     threshold = effective_min_severity(config, SCOPE)
 
     module_drifts, skipped = gate(detect_module_drifts(workdir, osv, gomod_path), threshold)
@@ -215,7 +213,6 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     p,
                     dry_run=dry_run,
                     workdir=workdir,
-                    base_sha=base_sha,
                     pr_labels=config.defaults.pr_labels,
                 )
             )
@@ -243,7 +240,6 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     p,
                     dry_run=dry_run,
                     workdir=workdir,
-                    base_sha=base_sha,
                     pr_labels=config.defaults.pr_labels,
                 )
             )
