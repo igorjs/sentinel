@@ -1,47 +1,67 @@
 # Security Policy
 
-## Supported versions
+## Reporting a Vulnerability
 
-Sentinel is pre-1.0. Security fixes land on `main` and in the latest `v0.x`
-release. Pin to a released tag (`igorjs/sentinel@v0`) or a commit SHA; older
-tags do not receive backported fixes.
+**Do not open a public GitHub issue for security vulnerabilities.**
 
-## Reporting a vulnerability
+To report a vulnerability, use one of:
 
-Please report security issues privately, not via public issues or pull
-requests.
+- **GitHub Security Advisories**: [Report a vulnerability](https://github.com/igorjs/sentinel/security/advisories/new)
+- **Email**: **oss@mail.igorjs.io**
 
-- Use GitHub's private reporting: the repository's Security tab, then
-  Report a vulnerability (GitHub Security Advisories).
+Include:
 
-Include enough to reproduce: affected version/SHA, a minimal repro, the impact,
-and any suggested fix.
+- Description of the vulnerability
+- Steps to reproduce
+- Affected versions
+- Impact assessment (what can an attacker do?)
+- Suggested fix (if you have one)
 
 ### What to expect
 
-- Acknowledgement within 5 business days.
-- An initial assessment (severity, affected versions) within 10 business
-  days.
-- Coordinated disclosure: we agree on a timeline before any public detail, and
-  credit reporters who want it.
+- **Acknowledgement** within 48 hours
+- **Assessment** within 7 days (severity, affected scope, fix plan)
+- **Fix and disclosure** within 30 days for critical issues, 90 days for others
+
+If the report is accepted, you will be credited in the release notes (unless you prefer anonymity).
+
+If the report is declined (not a vulnerability, or out of scope), you will receive an explanation and may open a public issue.
+
+## Supported Versions
+
+| Version | Supported |
+|---------|-----------|
+| `v0.1.0` (latest) | Yes |
+| earlier | No |
+
+Only the latest released version (`v0.1.0`) receives security patches. Upgrade to the latest version before reporting.
 
 ## Scope
 
-In scope: the action itself, the Python in `scripts/`, the composite actions
-(`action.yml`, `discover/action.yml`), how it invokes `osv-scanner` / `gh` /
-package managers, and how advisory data flows into commands, branches, and PRs.
+### In scope
 
-Out of scope: vulnerabilities in `osv-scanner`, `gh`, GitHub Actions, or the
-package managers themselves (report those upstream), and findings in a
-consumer's own repository surfaced by sentinel (that is sentinel working as
-intended).
+Vulnerabilities in this repository's code, including but not limited to:
 
-## Hardening notes
+- Code execution, injection, or memory safety issues
+- Cryptographic weaknesses
+- Authentication or authorisation bypasses
+- Denial of service via crafted input
+- Bypass of any documented security guarantees (sandbox, isolation, etc.)
+- Compromise of the build, release, or signing pipeline (where applicable)
 
-- Sentinel runs with the permissions the consumer's workflow grants it
-  (typically `contents: write`, `pull-requests: write`, `issues: write`). Review
-  every PR it opens; it never auto-merges.
-- The action pins `osv-scanner` by version and verifies its SHA-256, pins its
-  Python dependencies, and SHA-pins the third-party actions it uses.
-- Advisory-sourced package names and versions are validated before they reach a
-  package manager command line.
+### Out of scope
+
+- Vulnerabilities in third-party dependencies (report to the upstream maintainer)
+- Issues that require an attacker to already have admin or write access to this repository
+- Theoretical issues without a practical exploit path
+- Social engineering attacks
+- Issues requiring physical access to the user's machine
+- Bugs in development-only tooling not shipped to end users
+
+## Hardening posture
+
+This repository is part of the `igorjs` repo set and follows a common
+hardening posture: ruleset-managed branch and tag protection, signed
+commits, SHA-pinned third-party actions, and an App-based bot identity
+with narrow per-repo scope. For the cross-repo configuration as code,
+see the [`repo-config`](https://github.com/igorjs/repo-config) repo.
