@@ -1,7 +1,13 @@
-name: sentinel
+name: Sentinel
 description: >
   Open auto-PRs for OSV-driven dependency bumps. Runs one scope at a time;
   may produce multiple PRs per invocation (one per detected drift).
+
+# Marketplace listing metadata (icon from the Feather set GitHub allows).
+branding:
+  icon: shield
+  color: blue
+
 inputs:
   scope:
     description: "Scope name (rust / go / javascript / python / <custom name>)"
