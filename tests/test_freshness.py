@@ -171,20 +171,6 @@ def test_run_grouped_single_selection_uses_scope_branch(tmp_path, monkeypatch):
     assert captured["branch"].endswith("/freshness")
 
 
-def test_run_threads_base_sha_to_apply_plan(tmp_path, monkeypatch):
-    captured = {}
-
-    def fake(plan, **kw):
-        captured["base_sha"] = kw.get("base_sha")
-        from scripts.models import Result
-
-        return Result(scope=plan.scope, key=plan.key, kind="pr", summary="")
-
-    monkeypatch.setattr(F, "apply_plan", fake)
-    F.run(tmp_path, _cfg(), dry_run=False, adapter=_FakeAdapter(_O), base_sha="deadbeef")
-    assert captured["base_sha"] == "deadbeef"
-
-
 def test_run_unsafe_identifier_opens_issue(tmp_path):
     bad = [Outdated("-rf", "1.0.0", "2.0.0", "2.0.0")]
     results = F.run(tmp_path, _cfg(), dry_run=True, adapter=_FakeAdapter(bad))

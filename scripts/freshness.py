@@ -135,7 +135,7 @@ def _issue(scope: str, detail: str, *, dry_run: bool, workdir, label: str | None
     )
 
 
-def run(workdir, config: Config, *, dry_run: bool, adapter, base_sha: str = "") -> list[Result]:
+def run(workdir, config: Config, *, dry_run: bool, adapter) -> list[Result]:
     scope = adapter.SCOPE
     if not update_freshness_enabled(config, scope):
         return []
@@ -173,7 +173,6 @@ def run(workdir, config: Config, *, dry_run: bool, adapter, base_sha: str = "") 
                     plan,
                     dry_run=dry_run,
                     workdir=workdir,
-                    base_sha=base_sha,
                     pr_labels=config.defaults.pr_labels,
                 )
             )

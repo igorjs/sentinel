@@ -213,39 +213,3 @@ def test_run_no_runtime_pr_when_opted_out(tmp_path):
     # default config -> update_runtime False
     results = run(tmp_path, Config(), _empty_osv(), dry_run=True)
     assert [r for r in results if r.key == "runtime-eol"] == []
-
-
-def test_run_captures_base_sha_before_runtime_pass(workdir, fixtures_dir, monkeypatch):
-    """Security PRs must branch off the pre-runtime HEAD.
-
-    runtime_results can `git switch -C` onto its own PR branch and never
-    restore HEAD (pr.apply_plan does not). Capturing base_sha *after* the
-    runtime pass would branch the security PR off the runtime PR, mixing
-    runtime edits into the security bump. The capture must happen up front,
-    off clean HEAD.
-    """
-    import scripts.scope_python as P
-    from scripts.models import Result
-
-    (workdir / "uv.lock").write_text("")
-    osv = from_fixture(fixtures_dir / "osv_pypi_fixable.json")
-
-    head = {"sha": "clean-main"}
-    monkeypatch.setattr(P, "capture_base_sha", lambda _wd: head["sha"])
-
-    def fake_runtime(workdir, config, scope, *, dry_run):
-        head["sha"] = "runtime-branch-tip"  # runtime pass leaves HEAD dirty
-        return []
-
-    monkeypatch.setattr(P.runtime, "runtime_results", fake_runtime)
-
-    captured: list[str] = []
-
-    def fake_apply_plan(plan, **kw):
-        captured.append(kw.get("base_sha"))
-        return Result(scope=plan.scope, key=plan.key, kind="pr", summary="")
-
-    monkeypatch.setattr(P, "apply_plan", fake_apply_plan)
-
-    run(workdir, Config(), osv, dry_run=False)
-    assert captured == ["clean-main"]

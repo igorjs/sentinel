@@ -429,8 +429,7 @@ def test_runtime_results_lock_refresh_failure_falls_back_to_issue(tmp_path, monk
 
     monkeypatch.setattr(rt, "apply_plan", boom)
     cfg = Config(scopes={"python": ScopeOverride(update_runtime=True)})
-    # dry_run=True so base_sha is "" (no git in tmp_path); the monkeypatched
-    # apply_plan still raises, exercising the except branch.
+    # dry_run=True: apply_plan is monkeypatched and still raises, exercising the except branch.
     results = rt.runtime_results(tmp_path, cfg, "python", dry_run=True)
     assert any(r.key == "runtime-eol-lock-refresh" for r in results)
 

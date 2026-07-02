@@ -9,7 +9,7 @@ from pathlib import Path
 from scripts.config import Config, CustomScope
 from scripts.models import Drift, Plan, Result
 from scripts.osv import OsvCache
-from scripts.pr import apply_plan, capture_base_sha, open_issue_fallback
+from scripts.pr import apply_plan, open_issue_fallback
 from scripts.target_yaml_env_var import read_value, write_value
 from scripts.version import version_key
 
@@ -96,7 +96,6 @@ def plan(workdir: Path, drift: Drift, custom: CustomScope) -> Plan:
 
 def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     results: list[Result] = []
-    base_sha = capture_base_sha(workdir) if not dry_run else ""
     for custom in config.custom:
         if custom.kind != SCOPE:
             continue
@@ -126,7 +125,6 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                         p,
                         dry_run=dry_run,
                         workdir=workdir,
-                        base_sha=base_sha,
                         pr_labels=config.defaults.pr_labels,
                     )
                 )

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from scripts.config import Config, effective_runtime_eol_lead_days, update_runtime_enabled
 from scripts.models import Plan, Result
-from scripts.pr import apply_plan, branch_name, capture_base_sha, open_issue_fallback
+from scripts.pr import apply_plan, branch_name, open_issue_fallback
 from scripts.runtime_eol import RuntimeEolError, eol_target, fetch_cycles
 
 SCOPE = "docker"
@@ -206,7 +206,6 @@ def run(workdir: Path, config: Config, osv: object, *, dry_run: bool) -> list[Re
     lead = effective_runtime_eol_lead_days(config, SCOPE)
     edits, manual = scan(workdir, lead_days=lead, today=_today(), fetch=fetch_cycles)
     out: list[Result] = []
-    base_sha = capture_base_sha(workdir) if not dry_run else ""
     if edits:
         try:
             out.append(
@@ -214,7 +213,6 @@ def run(workdir: Path, config: Config, osv: object, *, dry_run: bool) -> list[Re
                     _plan(workdir, edits),
                     dry_run=dry_run,
                     workdir=workdir,
-                    base_sha=base_sha,
                     pr_labels=config.defaults.pr_labels,
                 )
             )
