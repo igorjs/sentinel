@@ -20,7 +20,7 @@ from scripts.config import (
 from scripts.models import Plan, Result
 from scripts.pr import apply_plan, branch_name, open_issue_fallback
 from scripts.validate import UnsafeIdentifier, ensure_safe
-from scripts.version import version_key
+from scripts.version import semver_key
 
 
 class FreshnessError(RuntimeError):
@@ -45,7 +45,7 @@ class Selection:
 
 def _vgt(a: str, b: str) -> bool:
     """True when version a sorts strictly above version b."""
-    return version_key(a) > version_key(b)
+    return semver_key(a) > semver_key(b)
 
 
 def select(

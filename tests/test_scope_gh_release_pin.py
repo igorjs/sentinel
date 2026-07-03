@@ -64,3 +64,25 @@ def test_run_routes_upstream_failure_to_issue(workflow, custom, tmp_path, monkey
     assert len(results) == 1
     assert results[0].kind == "noop"
     assert "upstream lookup failed" in results[0].summary
+
+
+def test_detect_finds_newer_calver_upstream(tmp_path, fixtures_dir):
+    # Regression: padded-CalVer upstream tags must still be detected as drift.
+    p = tmp_path / ".github" / "workflows" / "release.yml"
+    p.parent.mkdir(parents=True)
+    text = (fixtures_dir / "workflow_with_env_var.yml").read_text().replace("0.18.1", "2024.01.01")
+    p.write_text(text)
+    cal = CustomScope(
+        name="cal-bottle",
+        kind="gh-release-pin",
+        extra={
+            "upstream_repo": "igorjs/libkrun-builds",
+            "target_file": ".github/workflows/release.yml",
+            "target_kind": "yaml-env-var",
+            "env_var": "LIBKRUN_BOTTLE_VERSION",
+        },
+    )
+    drifts = detect(tmp_path, cal, latest_resolver=lambda repo: "2024.02.01")
+    assert len(drifts) == 1
+    assert drifts[0].current == "2024.01.01"
+    assert drifts[0].fixed_versions == ["2024.02.01"]

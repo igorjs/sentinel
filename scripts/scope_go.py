@@ -18,7 +18,7 @@ from scripts.pr import (
 from scripts.severity import SEVERITY_ORDER, derive_severity, gate, meets_threshold, severity_line
 from scripts.suppression import osv_scanner_cleanup_step
 from scripts.validate import UnsafeIdentifier, ensure_safe
-from scripts.version import version_key
+from scripts.version import semver_key
 
 SCOPE = "go"
 
@@ -44,7 +44,7 @@ def detect_module_drifts(workdir: Path, osv: OsvCache, gomod_path: Path) -> list
                     for e in r.get("events", [])
                     if "fixed" in e
                 },
-                key=version_key,
+                key=semver_key,
             )
             if not fixed:
                 continue
@@ -86,9 +86,9 @@ def detect_runtime_drift(workdir: Path, osv: OsvCache, gomod_path: Path) -> Drif
                 for e in r.get("events", [])
                 if "fixed" in e
             },
-            key=version_key,
+            key=semver_key,
         )
-        best = next((v for v in candidates if version_key(v) >= version_key(current)), None)
+        best = next((v for v in candidates if semver_key(v) >= semver_key(current)), None)
         if best is None:
             continue
         fixable.append(best)
@@ -96,7 +96,7 @@ def detect_runtime_drift(workdir: Path, osv: OsvCache, gomod_path: Path) -> Drif
         severities.append(derive_severity(adv, score=osv.max_severity(adv["id"])))
     if not fixable:
         return None
-    target = max(fixable, key=version_key)
+    target = max(fixable, key=semver_key)
     known = [s for s in severities if s in SEVERITY_ORDER]
     runtime_severity = max(known, key=SEVERITY_ORDER.index) if known else "unknown"
     return Drift(
