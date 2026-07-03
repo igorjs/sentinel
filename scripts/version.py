@@ -32,9 +32,9 @@ _DIGITS = re.compile(r"\d+")
 class _Key:
     """Orderable version key. ``_Key(None)`` sorts below any parsed version.
 
-    Wraps a parsed ``packaging`` or ``semver`` version. Keys from different
-    ecosystems must not be compared with each other; every call site sorts
-    within a single ecosystem.
+    Wraps a parsed ``packaging`` or ``semver`` version, or a ``(release, pre)``
+    tuple from ``loose_tag_key``. Keys from different comparators must not be
+    compared with each other; every call site sorts within a single one.
     """
 
     __slots__ = ("_parsed",)
