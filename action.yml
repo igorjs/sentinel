@@ -27,7 +27,7 @@ runs:
         python-version: "3.12"
 
     - shell: bash
-      run: pip install --quiet "ruamel.yaml==0.19.1" "tomlkit==0.15.0"
+      run: pip install --quiet "ruamel.yaml==0.19.1" "tomlkit==0.15.0" "packaging==24.2" "semver==3.0.2"
 
     - shell: bash
       env:
