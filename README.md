@@ -1,45 +1,28 @@
-# sentinel
+# Sentinel
 
-Generic GitHub Action that opens auto-PRs for OSV-driven dependency bumps
-across rust, go, javascript, python, and custom upstream-release pins.
-Self-cleans `osv-scanner.toml` / `deny.toml` ignore lists when bumps
-retire their entries.
+> Auto-PRs that patch vulnerable dependencies, driven by the [OSV](https://osv.dev) database, across Rust, Go, JavaScript, and Python.
 
-Status: production-ready for the four built-in language scopes (`rust`, `go`,
-`javascript`, `python`), the `gh-release-pin` custom scope, and the opt-in
-`docker` and `ci` runtime-EOL scopes.
+[![CI](https://github.com/igorjs/sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/igorjs/sentinel/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/igorjs/sentinel?sort=semver)](https://github.com/igorjs/sentinel/releases)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/igorjs/sentinel/badge)](https://securityscorecards.dev/viewer/?uri=github.com/igorjs/sentinel)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-## What sentinel does (and doesn't)
+Sentinel watches your dependencies with OSV. When a fix lands for a known advisory, it opens a pull request that bumps to the minimum version closing it. You review, you merge, nothing auto-merges. It covers what Dependabot's security updates leave out: OSV's wider advisory set (RUSTSEC, Go, and PyPI natively), language-runtime pins, vendored release pins, and self-cleaning suppression lists.
 
-Does:
+## Highlights
 
-- Bumps cargo deps when OSV reports a fix is available
-- Bumps go module deps, and optionally the `go <version>` runtime directive
-- Bumps npm deps via npm/pnpm/yarn (lockfile-detected)
-- Bumps PyPI deps via poetry/uv/pipenv (lockfile-detected)
-- Bumps pinned vendor versions when upstream cuts a new release
-- Removes ignore entries from `osv-scanner.toml` / `deny.toml` when bumps close them
-
-Doesn't:
-
-- Auto-merge PRs (every PR gets a human review)
-- Routine "is there a newer version?" freshness bumps (that's Dependabot's job)
-
-Sentinel overlaps with Dependabot's security updates (both bump to the minimum
-version that closes an advisory) and complements them. Sentinel adds what
-Dependabot doesn't: OSV's broader advisory coverage (RUSTSEC, Go, and PyPI
-natively, not only the GitHub Advisory Database), language-runtime pins (the `go`
-directive), vendored `gh-release-pin` artefacts, self-cleaning of
-`osv-scanner.toml` / `deny.toml` suppression lists, and a configurable
-`min_severity` gate. It leaves routine "is there a newer version?" freshness
-bumps to Dependabot's version updates.
+- **OSV-driven security bumps** across Rust, Go, npm, and PyPI, to the minimum version that closes the advisory.
+- **More than dep versions**: raises end-of-life language runtimes, Docker base images, and CI version matrices, and re-pins vendored release artefacts.
+- **Self-cleaning**: strips stale `osv-scanner.toml` / `deny.toml` ignore entries once a bump retires them.
+- **Safe by default**: every change is a PR you review, and a `min_severity` gate keeps the noise down.
+- **No Dependabot overlap**: security-fix bumps only; routine freshness stays Dependabot's job, or opt in per scope.
 
 ## Quick start
 
-In your repo, create `.github/workflows/sentinel.yml`:
+Create `.github/workflows/sentinel.yml`:
 
 ```yaml
-name: sentinel
+name: Sentinel
 on:
   schedule:
     - cron: "0 6 * * 1"   # Mondays 06:00 UTC
@@ -65,7 +48,7 @@ jobs:
       scopes: ${{ steps.s.outputs.scopes }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: igorjs/sentinel/discover@v0
+      - uses: igorjs/sentinel/discover@v1
         id: s
 
   run:
@@ -78,31 +61,78 @@ jobs:
         scope: ${{ fromJson(needs.discover.outputs.scopes) }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: igorjs/sentinel@v0
+      - uses: igorjs/sentinel@v1
         with:
           scope: ${{ matrix.scope }}
           dry_run: ${{ inputs.dry_run || false }}
 ```
 
-No config file needed for a default repo layout.
+No config file needed for a default repo layout. The `discover` job auto-detects which scopes apply and fans the `run` job out over them.
 
-## Built-in scopes (auto-detected)
+## Scopes
 
-| Scope | Trigger file | What it bumps | Runtime bump |
+Sentinel picks the scopes that apply from the files in your repo.
+
+| Scope | Detected by | What it bumps | Runtime EOL |
 |---|---|---|---|
-| `rust` | `Cargo.lock` | Cargo deps via `cargo update --precise` + self-cleans `osv-scanner.toml` / `deny.toml` | N/A |
-| `go` | `go.mod` (any path) | Module deps via `go get` + `go mod tidy`. Optionally bumps `go <version>` runtime directive for stdlib advisories. | Default ON; `[scopes.go] update_runtime = false` to opt out |
-| `javascript` | `package.json` | npm deps via npm/pnpm/yarn (auto-detected from lockfile) | N/A (deferred to v0.2) |
-| `python` | `pyproject.toml` / `requirements.txt` / lockfile | PyPI deps via poetry/uv/pipenv (auto-detected from lockfile) | N/A (deferred to v0.2) |
-| `docker` | `Dockerfile` (and variants, recursively) | Base-image tags for python / node | Opt-in; `[scopes.docker] update_runtime = true` |
-| `ci` | `.github/workflows/*.yml` | End-of-life matrix entries (python-version / node-version) and runner OS labels (`runs-on:`, `strategy.matrix.os:`) in GitHub Actions workflows | Opt-in; `[scopes.ci] update_runtime = true` |
+| `rust` | `Cargo.lock` | Cargo deps via `cargo update --precise`, self-cleans `osv-scanner.toml` / `deny.toml` | N/A |
+| `go` | `go.mod` | Module deps via `go get` + `go mod tidy`, optionally the `go <version>` directive | On by default |
+| `javascript` | `package.json` | npm deps via npm / pnpm / yarn (lockfile-detected) | Opt-in |
+| `python` | `pyproject.toml`, `requirements.txt`, or a lockfile | PyPI deps via poetry / uv / pipenv (lockfile-detected) | Opt-in |
+| `docker` | `Dockerfile` (recursive) | EOL `python` / `node` base-image tags | Opt-in |
+| `ci` | `.github/workflows/*.yml` | EOL `python-version` / `node-version` matrices and runner OS labels | Opt-in |
 
-Lockfile-less repos surface a "no lockfile" issue rather than risk a broken bump.
+A repo without a lockfile gets a "no lockfile" issue instead of a risky bump.
 
-## Custom scopes
+## Configuration
 
-For vendored artefacts pinned in a workflow YAML, declare a
-`gh-release-pin` custom scope in `.github/sentinel.toml`:
+Everything below is optional and lives in `.github/sentinel.toml`.
+
+<details>
+<summary><b>Severity gating</b></summary>
+
+By default Sentinel acts on every fixable advisory. To act only at or above a severity, set `min_severity` (`none`, `low`, `medium`, `high`, `critical`) globally or per scope:
+
+```toml
+[defaults]
+min_severity = "high"      # global floor
+
+[scopes.javascript]
+min_severity = "critical"  # stricter for one scope
+```
+
+Severity comes from the CVSS score `osv-scanner` reports. Advisories with no severity data are bumped anyway (the PR says so), so a serious-but-unscored CVE is never silently skipped. `gh-release-pin` scopes are freshness-driven and aren't gated.
+</details>
+
+<details>
+<summary><b>Runtime EOL bumps (opt-in)</b></summary>
+
+Set `update_runtime = true` on a scope to open PRs that raise an end-of-life (or near-EOL) runtime to the oldest still-supported version. EOL dates come from [endoflife.date](https://endoflife.date), and these PRs ignore `min_severity`. `runtime_eol_lead_days` (default `30`) opens the PR that many days before the EOL date.
+
+- **Python** reads `requires-python`, `.python-version`, `.tool-versions`, and mise configs.
+- **Node** reads `engines.node`, `.nvmrc`, `.node-version`, `.tool-versions`, and mise configs.
+- **Docker** (`[scopes.docker]`) raises EOL `python` / `node` base-image tags, preserving the variant suffix (`-slim`, `-alpine`, ...); digest-pinned bases are reported in an issue, not edited.
+- **CI** (`[scopes.ci]`) rewrites EOL `python-version` / `node-version` matrices and EOL runner OS labels (`runs-on:`, `strategy.matrix.os:`), preserving quoting and comments; `*-latest` and `${{ ... }}` are left alone.
+
+When a floor bump touches `requires-python` or `engines.node`, Sentinel refreshes the matching lockfile so the recorded constraint stays consistent, or opens an issue if the package manager isn't available.
+</details>
+
+<details>
+<summary><b>Version freshness (opt-in)</b></summary>
+
+Set `update_freshness = true` on the `javascript` scope to bump outdated npm deps to the newest version within their declared range. It runs separately from security bumps, on the `sentinel/javascript/freshness` branch.
+
+- `freshness_level`: `range` (default) stays within the constraint; `major` crosses it to the absolute latest.
+- `freshness_group`: `scope` (default) is one PR; `dependency` is one PR per dep.
+- `freshness_include` / `freshness_exclude`: dependency-name globs (exclude wins) to avoid overlapping with Dependabot.
+
+If `.github/dependabot.yml` exists, the PR notes it. Slice 1 covers npm; pnpm/yarn and the other ecosystems follow.
+</details>
+
+<details>
+<summary><b>Custom vendor pins (gh-release-pin)</b></summary>
+
+For a vendored artefact pinned in a workflow YAML, declare a `gh-release-pin` custom scope:
 
 ```toml
 [[custom]]
@@ -115,101 +145,29 @@ env_var = "LIBKRUN_BOTTLE_VERSION"
 # env_path = "jobs.publish.env"   # optional; default "env" (top-level)
 ```
 
-## Severity gating
+Sentinel opens a PR when upstream cuts a newer release.
+</details>
 
-By default sentinel acts on every fixable advisory. To act only at or above a
-severity, set `min_severity` (one of `none`, `low`, `medium`, `high`,
-`critical`) globally or per scope in `.github/sentinel.toml`:
+<details>
+<summary><b>Suppression recovery</b></summary>
 
-```toml
-[defaults]
-min_severity = "high"      # global floor
+`osv-scanner` hides advisories listed in `osv-scanner.toml`'s `IgnoredVulns`, so Sentinel runs a second scan that bypasses the ignore list. If an advisory you suppressed (say, when no fix existed) now has one, Sentinel opens a normal bump PR, and the `rust` scope's PR strips the now-removable `osv-scanner.toml` / `deny.toml` entry. A human still reviews it, so a deliberately-kept suppression can be declined.
+</details>
 
-[scopes.javascript]
-min_severity = "critical"  # stricter for one scope
-```
+## Sentinel vs Dependabot
 
-Severity comes from the CVSS score `osv-scanner` reports for the advisory.
-Advisories with no severity data are bumped anyway (and the PR says so), so a
-serious-but-unscored CVE is never silently skipped. `gh-release-pin` scopes are
-freshness-driven and are not gated.
+Dependabot already does CVE-driven security updates to the minimum patched version. Sentinel overlaps there and differs on the rest:
 
-## Runtime EOL bumps (opt-in)
-
-Set `update_runtime = true` on a `python` or `javascript` scope to also open PRs
-that raise an end-of-life (or near-EOL) runtime declaration to the oldest
-still-supported version. EOL dates come from endoflife.date. These PRs are
-independent of `min_severity`.
-
-- Python: `requires-python` (pyproject.toml), `.python-version`, `.tool-versions` (asdf/mise), and mise configs (`mise.toml`, `.mise.toml`, `.config/mise/config.toml`)
-- Node: `engines.node` (package.json), `.nvmrc`, `.node-version`, `.tool-versions` (asdf/mise), and mise configs (`mise.toml`, `.mise.toml`, `.config/mise/config.toml`)
-
-### Docker base images (opt-in)
-
-Set `update_runtime = true` on a `docker` scope to scan Dockerfiles
-(`Dockerfile`, `Dockerfile.*`, `*.Dockerfile`, recursively) and open a PR raising
-end-of-life official `python` / `node` base-image tags to the oldest still-supported
-version (e.g. `FROM python:3.8-slim` -> `FROM python:3.9-slim`). The variant suffix
-(`-slim`, `-alpine`, `-bookworm`, ...) is preserved. Digest-pinned bases
-(`python:3.8@sha256:...`) are reported in an issue instead of edited. EOL dates come
-from endoflife.date.
-
-`runtime_eol_lead_days` (default `30`, per-scope or under `[defaults]`) opens the
-PR that many days before the EOL date. `update_runtime` defaults to `false`.
-When a floor bump touches `requires-python` or `engines.node`, sentinel also refreshes the matching lockfile (`uv.lock`, `poetry.lock`, `Pipfile.lock`, or `package-lock.json`) so the recorded runtime constraint stays consistent. If the package manager isn't available, it opens an issue instead.
-
-### CI version matrices (opt-in)
-
-Set `update_runtime = true` on a `ci` scope to scan `.github/workflows/*.yml` and
-open a PR replacing end-of-life `python-version` / `node-version` matrix entries with
-the oldest still-supported version (e.g. `python-version: ["3.8", "3.10"]` ->
-`["3.9", "3.10"]`). EOL entries are dropped when supported versions remain, an all-EOL
-list collapses to the oldest supported (never empty), and quoting/comments are
-preserved. EOL dates come from endoflife.date.
-
-When `update_runtime` is enabled for `ci`, sentinel also bumps end-of-life runner OS labels in `runs-on:` and `strategy.matrix.os:` (Ubuntu, macOS, Windows) to the oldest version still in vendor support (source: endoflife.date). Suffixes like `-arm` / `-large` are preserved; `*-latest` and `${{ ... }}` expressions are left untouched. Note: this tracks the OS vendor's end-of-life, which for Windows Server lags GitHub's runner-image removal.
-
-## Version freshness (opt-in)
-
-Set `update_freshness = true` on the `javascript` scope to open PRs that bump
-outdated npm deps to the newest version within their declared range (the npm
-"wanted"). This is opt-in and off by default; it runs separately from security
-bumps, on the `sentinel/javascript/freshness` branch.
-
-- `freshness_level`: `range` (default) bumps within the declared constraint;
-  `major` also crosses the range to the absolute latest, editing the constraint.
-- `freshness_group`: `scope` (default) puts all bumps in one PR; `dependency`
-  opens one PR per dep.
-- `freshness_include` / `freshness_exclude`: dependency-name globs to scope which
-  deps are touched (exclude wins). Use these to avoid overlap with Dependabot.
-
-If `.github/dependabot.yml` exists, the PR notes that Dependabot is also active.
-Freshness is independent of `min_severity`. Slice 1 covers npm; pnpm/yarn and the
-other ecosystems follow.
-
-## Suppression recovery
-
-`osv-scanner` hides advisories listed in `osv-scanner.toml`'s `IgnoredVulns`, so
-sentinel runs a second scan that bypasses that ignore list. If an advisory you
-suppressed (e.g. when no fix existed) now has a fix, sentinel opens a normal
-bump PR for it, and the `rust` scope's PR also strips the now-removable
-`osv-scanner.toml` / `deny.toml` entry. As with every sentinel PR, a human
-reviews it, so a deliberately-kept suppression can be declined.
-
-## How sentinel differs from Dependabot
-
-Dependabot already does CVE-driven security updates to the minimum patched
-version. Sentinel overlaps there and differs on the rest:
-
-| Dimension | Dependabot | sentinel |
+| Dimension | Dependabot | Sentinel |
 |---|---|---|
 | Advisory source | GitHub Advisory Database | OSV (RUSTSEC, Go, PyPI, npm, crates.io, ...) |
-| Version (freshness) updates | Yes, picks latest | No, left to Dependabot |
+| Freshness updates | Yes, picks latest | No, left to Dependabot (or opt in) |
 | Security updates | Yes, minimum patched version | Yes, minimum version that closes the OSV advisory |
-| Beyond dep versions | None | Language runtime pins + `gh-release-pin` vendor pins |
-| Suppression lists | Manual `dependabot.yml` block | Reads + self-cleans `osv-scanner.toml` / `deny.toml` |
-| Severity gating | Not configurable per-run | `min_severity` (global + per-scope) |
+| Beyond dep versions | None | Language-runtime pins + `gh-release-pin` vendor pins |
+| Suppression lists | Manual `dependabot.yml` block | Reads and self-cleans `osv-scanner.toml` / `deny.toml` |
+| Severity gating | Not configurable per run | `min_severity` (global and per-scope) |
 
 ## License
 
 [Apache-2.0](LICENSE).
+</content>
