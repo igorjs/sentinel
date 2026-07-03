@@ -1,4 +1,4 @@
-from scripts.version import pypi_key, semver_key
+from scripts.version import loose_tag_key, pypi_key, semver_key
 
 # --- SemVer (crates / go / npm) ---
 
@@ -80,3 +80,33 @@ def test_pypi_sorted_prefers_lower_stable_over_prerelease():
     ordered = sorted(versions, key=pypi_key)
     assert ordered[0] == "1.26.5"
     assert ordered[-1] == "2.0.1"
+
+
+# --- semver_key >= / <= operators ---
+
+
+def test_semver_key_ge_and_le_operators():
+    assert semver_key("1.0.0") >= semver_key("1.0.0")
+    assert semver_key("1.0.0") <= semver_key("1.0.0")
+    assert semver_key("2.0.0") >= semver_key("1.0.0")
+
+
+# --- loose_tag_key (gh-release-pin freeform tags) ---
+
+
+def test_loose_tag_key_orders_calver_and_four_component():
+    # The shapes semver_key rejects but the freeform-tag path must still order.
+    assert loose_tag_key("2024.01.01") < loose_tag_key("2024.02.01")
+    assert loose_tag_key("2024.01.01") != loose_tag_key("2024.02.01")
+    assert loose_tag_key("1.2.3.4") > loose_tag_key("1.2.3.3")
+    assert loose_tag_key("1.02.3") == loose_tag_key("1.2.3")
+
+
+def test_loose_tag_key_v_prefix_and_prerelease_and_build():
+    assert loose_tag_key("v1.2.0") == loose_tag_key("1.2.0")
+    assert loose_tag_key("1.2.3-rc.1") < loose_tag_key("1.2.3")
+    assert loose_tag_key("1.0.0+build.5") == loose_tag_key("1.0.0")
+
+
+def test_loose_tag_key_no_digits_sorts_lowest():
+    assert loose_tag_key("nightly") < loose_tag_key("0.0.1")

@@ -10,15 +10,22 @@ minor/patch component. ``pypi_key`` delegates entirely to
 ``packaging.version.Version``. Both collapse unparseable input to an internal
 sentinel that sorts below every valid version so junk never masquerades as a
 valid fix.
+
+gh-release-pin freeform upstream tags use ``loose_tag_key``, which orders by
+numeric release components so it tolerates zero-padded CalVer (``2024.01.01``),
+4-component versions, and other non-SemVer shapes that real projects tag with.
 """
 
 from __future__ import annotations
 
 import functools
+import re
 from typing import Any
 
 import semver
 from packaging.version import InvalidVersion, Version
+
+_DIGITS = re.compile(r"\d+")
 
 
 @functools.total_ordering
@@ -74,3 +81,27 @@ def semver_key(value: str) -> _Key:
         return _Key(semver.Version.parse(v, optional_minor_and_patch=True))
     except (ValueError, TypeError):
         return _Key(None)
+
+
+def loose_tag_key(value: str) -> _Key:
+    """Order a freeform upstream release tag leniently (gh-release-pin).
+
+    Upstream repos tag releases in varied schemes: strict SemVer, zero-padded
+    CalVer (``2024.01.01``), 4-component, etc. Strict SemVer parsing rejects the
+    non-SemVer numeric shapes and would treat them as unorderable, so this path
+    orders by numeric release components instead, demoting a ``-``-delimited
+    prerelease below its release. Tags with no digits sort lowest. Trades
+    precise SemVer prerelease precedence for tolerance of real release-tag
+    shapes; only gh-release-pin uses it, so its keys are never compared against
+    pypi_key / semver_key keys.
+    """
+    v = value.strip()
+    if v[:1] in ("v", "V"):
+        v = v[1:]
+    v = v.split("+", 1)[0]  # drop build metadata
+    release_s, sep, pre_s = v.partition("-")
+    release = tuple(int(x) for x in _DIGITS.findall(release_s))
+    if not release:
+        return _Key(None)
+    pre = (1,) if not sep else (0, pre_s)
+    return _Key((release, pre))
