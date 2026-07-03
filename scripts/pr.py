@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -18,7 +19,12 @@ DEFAULT_PR_LABELS = ["dependencies", "automated"]
 def branch_name(scope: str, key: str) -> str:
     scope_slug = _SAFE.sub("-", scope.lower()).strip("-")
     key_slug = _SAFE.sub("-", key.lower()).strip("-")
-    return f"sentinel/{scope_slug}/{key_slug}"
+    # Append a short digest of the raw key so two keys that slugify the same
+    # (e.g. the npm scoped name "@a/b" and "a-b") never share a branch, which
+    # would make one bump silently force-push over the other.
+    digest = hashlib.sha256(key.encode()).hexdigest()[:8]
+    suffix = f"{key_slug}-{digest}" if key_slug else digest
+    return f"sentinel/{scope_slug}/{suffix}"
 
 
 def assert_pushable(branch: str) -> None:
