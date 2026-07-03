@@ -213,3 +213,44 @@ def test_run_no_runtime_pr_when_opted_out(tmp_path):
     # default config -> update_runtime False
     results = run(tmp_path, Config(), _empty_osv(), dry_run=True)
     assert [r for r in results if r.key == "runtime-eol"] == []
+
+
+def test_detect_orders_pep440_prereleases(workdir: Path):
+    # A PEP 440 prerelease is not hyphenated, so the old comparator sorted
+    # "2.0.0rc1" ABOVE "2.0.0". detect() must order it below.
+    osv = OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "PyPI", "name": "requests"},
+                            "groups": [{"ids": ["GHSA-test"], "max_severity": "7.5"}],
+                            "vulnerabilities": [
+                                {
+                                    "id": "GHSA-test",
+                                    "summary": "test",
+                                    "affected": [
+                                        {
+                                            "package": {"name": "requests"},
+                                            "ranges": [
+                                                {
+                                                    "events": [
+                                                        {"fixed": "2.0.0"},
+                                                        {"fixed": "2.0.0rc1"},
+                                                    ]
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+    drift = detect(workdir, osv)[0]
+    assert drift.fixed_versions[0] == "2.0.0rc1"
+    assert drift.fixed_versions[-1] == "2.0.0"

@@ -11,7 +11,7 @@ from scripts.models import Drift, Plan, Result
 from scripts.osv import OsvCache
 from scripts.pr import apply_plan, open_issue_fallback
 from scripts.target_yaml_env_var import read_value, write_value
-from scripts.version import version_key
+from scripts.version import semver_key
 
 SCOPE = "gh-release-pin"
 
@@ -47,9 +47,9 @@ def detect(
     if current is None:
         return []
     latest = _strip_v(resolve(upstream_repo))
-    if version_key(current) == version_key(latest):
+    if semver_key(current) == semver_key(latest):
         return []
-    if not version_key(latest) > version_key(current):
+    if not semver_key(latest) > semver_key(current):
         return []
     return [
         Drift(

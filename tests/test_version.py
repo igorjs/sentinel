@@ -1,12 +1,4 @@
-from scripts.version import pypi_key, semver_key, version_key
-
-# --- existing hand-rolled comparator (kept until Task 3) ---
-
-
-def test_version_key_still_present():
-    # version_key stays until every caller migrates in Task 3.
-    assert version_key("1.2.9") < version_key("1.2.10")
-
+from scripts.version import pypi_key, semver_key
 
 # --- SemVer (crates / go / npm) ---
 

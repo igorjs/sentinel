@@ -19,7 +19,7 @@ from scripts.pr import (
 from scripts.severity import derive_severity, gate, severity_line
 from scripts.suppression import osv_scanner_cleanup_step
 from scripts.validate import UnsafeIdentifier, ensure_safe
-from scripts.version import version_key
+from scripts.version import semver_key
 
 SCOPE = "rust"
 
@@ -49,7 +49,7 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
                     for e in r.get("events", [])
                     if "fixed" in e
                 },
-                key=version_key,
+                key=semver_key,
             )
             if not fixed:
                 continue
@@ -150,7 +150,7 @@ def _current_version(lock_text: str, pkg: str) -> str | None:
 
 def _minimum_acceptable_fix(fixed_versions: list[str], current: str) -> str:
     for v in fixed_versions:
-        if version_key(v) >= version_key(current):
+        if semver_key(v) >= semver_key(current):
             return v
     return fixed_versions[-1]
 

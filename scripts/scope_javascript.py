@@ -19,7 +19,7 @@ from scripts.pr import (
 from scripts.severity import derive_severity, gate, severity_line
 from scripts.suppression import osv_scanner_cleanup_step
 from scripts.validate import UnsafeIdentifier, ensure_safe
-from scripts.version import version_key
+from scripts.version import semver_key
 
 SCOPE = "javascript"
 
@@ -64,7 +64,7 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
                     for e in r.get("events", [])
                     if "fixed" in e
                 },
-                key=version_key,
+                key=semver_key,
             )
             if not fixed:
                 continue
