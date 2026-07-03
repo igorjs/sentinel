@@ -1,6 +1,6 @@
-name: sentinel-discover
+name: Sentinel Discover
 description: >
-  Auto-detect enabled sentinel scopes for a repo. Outputs a JSON array.
+  Auto-detect enabled Sentinel scopes for a repo. Outputs a JSON array.
 inputs:
   config_path:
     description: "Path to sentinel.toml relative to workspace"
