@@ -34,6 +34,9 @@ def _remove_from_osv_scanner_toml(path: Path, advisory_id: str) -> None:
     # crossing into a neighbouring block. `(?:(?!\n\[\[).)*?` is a tempered
     # greedy token: it matches any char EXCEPT the start of the next `\n[[`
     # header, so removing one advisory can't delete the blocks around it.
+    # Limitation: the boundary is any line starting with `[[`, so a multi-line
+    # `reason` whose own line begins with `[[` would truncate the match. osv
+    # reasons are short single-line strings, so that edge stays theoretical.
     pattern = re.compile(
         r"(?ms)^\[\[IgnoredVulns\]\]\s*\n"
         rf'(?:(?!\n\[\[).)*?id\s*=\s*"{re.escape(advisory_id)}"'
