@@ -30,9 +30,14 @@ def osv_scanner_cleanup_step(workdir: Path, advisory_id: str) -> Callable[[], No
 
 def _remove_from_osv_scanner_toml(path: Path, advisory_id: str) -> None:
     text = path.read_text()
+    # Match the single [[IgnoredVulns]] block that holds advisory_id without
+    # crossing into a neighbouring block. `(?:(?!\n\[\[).)*?` is a tempered
+    # greedy token: it matches any char EXCEPT the start of the next `\n[[`
+    # header, so removing one advisory can't delete the blocks around it.
     pattern = re.compile(
         r"(?ms)^\[\[IgnoredVulns\]\]\s*\n"
-        rf'.*?id\s*=\s*"{re.escape(advisory_id)}".*?(?=\n\[\[|\Z)'
+        rf'(?:(?!\n\[\[).)*?id\s*=\s*"{re.escape(advisory_id)}"'
+        r"(?:(?!\n\[\[).)*?(?=\n\[\[|\Z)"
     )
     new_text = pattern.sub("", text).rstrip() + "\n"
     path.write_text(new_text)
