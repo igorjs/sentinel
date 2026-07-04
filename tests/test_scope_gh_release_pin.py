@@ -85,7 +85,8 @@ def test_plan_branch_goes_through_branch_name(workflow, custom, tmp_path):
     drift = detect(tmp_path, custom, latest_resolver=lambda repo: "v0.19.0")[0]
     p = plan(tmp_path, drift, custom)
     assert p.branch.startswith("sentinel/gh-release-pin/")
-    assert p.branch != "sentinel/gh-release-pin/libkrun-bottle-0.19.0"  # hashed, not raw
+    # detect() strips the leading v (v0.19.0 -> 0.19.0); branch is hashed, not the raw f-string.
+    assert p.branch != "sentinel/gh-release-pin/libkrun-bottle-0.19.0"
 
 
 def test_run_routes_unsafe_tag_to_issue(workflow, custom, tmp_path, monkeypatch):
