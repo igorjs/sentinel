@@ -10,6 +10,7 @@ from scripts.scope_go import (
     plan_module,
     plan_runtime,
 )
+from scripts.validate import UnsafeIdentifier
 
 
 @pytest.fixture
@@ -131,3 +132,24 @@ def test_plan_module_cleans_osv_scanner_toml(workdir: Path):
     for step in p.post_steps:
         step()
     assert "GO-X" not in (workdir / "osv-scanner.toml").read_text()
+
+
+def test_plan_runtime_rejects_unsafe_target(workdir: Path):
+    drift = Drift(
+        scope="go",
+        key="runtime-x",
+        summary="s",
+        fixed_versions=["1.25.0 ; evil"],
+        current="1.24.4",
+        raw={"advisory_ids": ["GO-X"], "target": "1.25.0 ; evil"},
+    )
+    with pytest.raises(UnsafeIdentifier):
+        plan_runtime(workdir, drift, workdir / "go.mod")
+
+
+def test_plan_runtime_branch_goes_through_branch_name(workdir: Path, fixtures_dir: Path):
+    osv = from_fixture(fixtures_dir / "osv_go_stdlib.json")
+    drift = detect_runtime_drift(workdir, osv, workdir / "go.mod")
+    p = plan_runtime(workdir, drift, workdir / "go.mod")
+    assert p.branch.startswith("sentinel/go/")
+    assert p.branch != "sentinel/go/runtime-1.25.11"  # hashed, not the raw f-string

@@ -146,6 +146,7 @@ def plan_module(
 
 def plan_runtime(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
     target = drift.raw["target"]
+    ensure_safe(target)
     advisories = drift.raw["advisory_ids"]
     items = "\n".join(f"- [{a}](https://osv.dev/{a})" for a in advisories)
     body = (
@@ -173,7 +174,7 @@ def plan_runtime(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
     return Plan(
         scope=SCOPE,
         key=drift.key,
-        branch=f"sentinel/go/runtime-{target}",
+        branch=branch_name(SCOPE, f"runtime {target}"),
         title=f"go: bump runtime to {target}",
         body=body,
         files_changed=[str(gomod_path.relative_to(workdir))],
@@ -234,15 +235,27 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
         runtime_drift = None
     if runtime_drift:
         if update_runtime:
-            p = plan_runtime(workdir, runtime_drift, gomod_path)
-            results.append(
-                apply_plan(
-                    p,
-                    dry_run=dry_run,
-                    workdir=workdir,
-                    pr_labels=config.defaults.pr_labels,
+            try:
+                p = plan_runtime(workdir, runtime_drift, gomod_path)
+            except UnsafeIdentifier as e:
+                results.append(
+                    open_unsafe_identifier_issue(
+                        scope=SCOPE,
+                        key=runtime_drift.key,
+                        error=e,
+                        dry_run=dry_run,
+                        workdir=workdir,
+                    )
                 )
-            )
+            else:
+                results.append(
+                    apply_plan(
+                        p,
+                        dry_run=dry_run,
+                        workdir=workdir,
+                        pr_labels=config.defaults.pr_labels,
+                    )
+                )
         else:
             advisories = runtime_drift.raw["advisory_ids"]
             target = runtime_drift.raw["target"]
