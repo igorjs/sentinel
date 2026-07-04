@@ -168,7 +168,7 @@ def test_run_grouped_single_selection_uses_scope_branch(tmp_path, monkeypatch):
     one = [Outdated("lodash", "4.17.20", "4.17.21", "5.0.0")]
     F.run(tmp_path, _cfg(), dry_run=True, adapter=_FakeAdapter(one))
     assert captured["key"] == "freshness"
-    assert captured["branch"].endswith("/freshness")
+    assert captured["branch"].rsplit("/", 1)[-1].startswith("freshness-")
 
 
 def test_run_unsafe_identifier_opens_issue(tmp_path):

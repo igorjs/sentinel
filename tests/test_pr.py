@@ -8,19 +8,35 @@ from scripts.pr import assert_pushable, branch_name
 
 
 def test_branch_name_basic():
-    assert branch_name("rust", "RUSTSEC-2024-1") == "sentinel/rust/rustsec-2024-1"
+    assert branch_name("rust", "RUSTSEC-2024-1").startswith("sentinel/rust/rustsec-2024-1-")
 
 
 def test_branch_name_lowercases():
-    assert branch_name("Rust", "Foo") == "sentinel/rust/foo"
+    assert branch_name("Rust", "Foo").startswith("sentinel/rust/foo-")
 
 
 def test_branch_name_replaces_unsafe_chars():
-    assert branch_name("go", "GO 2024 / 12") == "sentinel/go/go-2024-12"
+    assert branch_name("go", "GO 2024 / 12").startswith("sentinel/go/go-2024-12-")
 
 
 def test_branch_name_collapses_repeats():
-    assert branch_name("go", "a//b") == "sentinel/go/a-b"
+    assert branch_name("go", "a//b").startswith("sentinel/go/a-b-")
+
+
+def test_branch_name_distinguishes_punctuation_only_keys():
+    # "@scope/pkg" and "scope-pkg" slugify identically; the hash keeps them apart.
+    a = branch_name("javascript", "OSV-1 @scope/pkg")
+    b = branch_name("javascript", "OSV-1 scope-pkg")
+    assert a != b
+
+
+def test_branch_name_appends_stable_hex_suffix():
+    b = branch_name("rust", "RUSTSEC-2024-1")
+    prefix = "sentinel/rust/rustsec-2024-1-"
+    assert b.startswith(prefix)
+    suffix = b[len(prefix) :]
+    assert len(suffix) == 8 and all(c in "0123456789abcdef" for c in suffix)
+    assert branch_name("rust", "RUSTSEC-2024-1") == b  # deterministic
 
 
 def test_assert_pushable_allows_sentinel_branch():
