@@ -6,7 +6,9 @@ import pytest
 
 from scripts import scope_gh_release_pin
 from scripts.config import Config, CustomScope
+from scripts.models import Drift
 from scripts.scope_gh_release_pin import detect, plan, run
+from scripts.validate import UnsafeIdentifier
 
 
 @pytest.fixture
@@ -64,6 +66,34 @@ def test_run_routes_upstream_failure_to_issue(workflow, custom, tmp_path, monkey
     assert len(results) == 1
     assert results[0].kind == "noop"
     assert "upstream lookup failed" in results[0].summary
+
+
+def test_plan_rejects_unsafe_tag(custom, tmp_path):
+    drift = Drift(
+        scope="gh-release-pin",
+        key="9999.0.0 ; evil",
+        summary="x",
+        fixed_versions=["9999.0.0 ; evil"],
+        current="0.18.1",
+        raw={"custom": custom, "target_file": str(tmp_path / "f.yml")},
+    )
+    with pytest.raises(UnsafeIdentifier):
+        plan(tmp_path, drift, custom)
+
+
+def test_plan_branch_goes_through_branch_name(workflow, custom, tmp_path):
+    drift = detect(tmp_path, custom, latest_resolver=lambda repo: "v0.19.0")[0]
+    p = plan(tmp_path, drift, custom)
+    assert p.branch.startswith("sentinel/gh-release-pin/")
+    assert p.branch != "sentinel/gh-release-pin/libkrun-bottle-0.19.0"  # hashed, not raw
+
+
+def test_run_routes_unsafe_tag_to_issue(workflow, custom, tmp_path, monkeypatch):
+    monkeypatch.setattr(scope_gh_release_pin, "_gh_latest", lambda repo: "9999.0.0 ; evil")
+    results = run(tmp_path, Config(custom=[custom]), None, dry_run=True)
+    assert len(results) == 1
+    assert results[0].kind == "noop"  # dry-run issue
+    assert "unsafe" in results[0].summary.lower()
 
 
 def test_detect_finds_newer_calver_upstream(tmp_path, fixtures_dir):
