@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from scripts.freshness import FreshnessError, Outdated, Selection
+from scripts.validate import ensure_safe
 
 SCOPE = "javascript"
 FILES_CHANGED = ["package.json", "package-lock.json"]
@@ -114,6 +115,7 @@ def _bump_manifest(workdir: Path, majors: list[Selection]) -> None:
 
 
 def apply(workdir: Path, selections: list[Selection]) -> None:
+    ensure_safe(*[s.name for s in selections], *[s.target for s in selections])
     in_range = [s for s in selections if not s.is_major]
     majors = [s for s in selections if s.is_major]
     if in_range:

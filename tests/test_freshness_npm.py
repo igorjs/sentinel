@@ -6,6 +6,7 @@ import pytest
 
 import scripts.freshness_npm as N
 from scripts.freshness import FreshnessError, Outdated, Selection
+from scripts.validate import UnsafeIdentifier
 
 _OUTDATED_JSON = json.dumps(
     {
@@ -171,3 +172,12 @@ def test_apply_npm_failure_raises(tmp_path, monkeypatch):
     )
     with pytest.raises(FreshnessError):
         N.apply(tmp_path, [Selection("lodash", "4.17.20", "4.17.21", False)])
+
+
+def test_apply_rejects_unsafe_selection_name(tmp_path, monkeypatch):
+    # Defense in depth: apply validates its own argv, not just its caller.
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=0, stdout="", stderr="")
+    )
+    with pytest.raises(UnsafeIdentifier):
+        N.apply(tmp_path, [Selection("--registry=evil", "1.0.0", "1.1.0", False)])
