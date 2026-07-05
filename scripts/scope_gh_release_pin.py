@@ -9,8 +9,9 @@ from pathlib import Path
 from scripts.config import Config, CustomScope
 from scripts.models import Drift, Plan, Result
 from scripts.osv import OsvCache
-from scripts.pr import apply_plan, open_issue_fallback
+from scripts.pr import apply_plan, branch_name, open_issue_fallback, open_unsafe_identifier_issue
 from scripts.target_yaml_env_var import read_value, write_value
+from scripts.validate import UnsafeIdentifier, ensure_safe
 from scripts.version import loose_tag_key
 
 SCOPE = "gh-release-pin"
@@ -65,6 +66,7 @@ def detect(
 
 def plan(workdir: Path, drift: Drift, custom: CustomScope) -> Plan:
     new_value = drift.fixed_versions[0]
+    ensure_safe(new_value)
     target_file = Path(drift.raw["target_file"])
     env_var = custom.extra["env_var"]
     env_path = custom.extra.get("env_path", "env")
@@ -85,7 +87,7 @@ def plan(workdir: Path, drift: Drift, custom: CustomScope) -> Plan:
     return Plan(
         scope=SCOPE,
         key=drift.key,
-        branch=f"sentinel/gh-release-pin/{custom.name}-{new_value}",
+        branch=branch_name(SCOPE, f"{custom.name} {new_value}"),
         title=f"{custom.name}: bump to {new_value}",
         body=body,
         files_changed=[str(target_file.relative_to(workdir))],
@@ -126,6 +128,12 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                         dry_run=dry_run,
                         workdir=workdir,
                         pr_labels=config.defaults.pr_labels,
+                    )
+                )
+            except UnsafeIdentifier as e:
+                results.append(
+                    open_unsafe_identifier_issue(
+                        scope=SCOPE, key=drift.key, error=e, dry_run=dry_run, workdir=workdir
                     )
                 )
             except (subprocess.CalledProcessError, KeyError) as e:

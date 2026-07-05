@@ -10,6 +10,7 @@ from scripts.scope_go import (
     plan_module,
     plan_runtime,
 )
+from scripts.validate import UnsafeIdentifier
 
 
 @pytest.fixture
@@ -131,3 +132,47 @@ def test_plan_module_cleans_osv_scanner_toml(workdir: Path):
     for step in p.post_steps:
         step()
     assert "GO-X" not in (workdir / "osv-scanner.toml").read_text()
+
+
+def test_plan_runtime_rejects_unsafe_target(workdir: Path):
+    drift = Drift(
+        scope="go",
+        key="runtime-x",
+        summary="s",
+        fixed_versions=["1.25.0 ; evil"],
+        current="1.24.4",
+        raw={"advisory_ids": ["GO-X"], "target": "1.25.0 ; evil"},
+    )
+    with pytest.raises(UnsafeIdentifier):
+        plan_runtime(workdir, drift, workdir / "go.mod")
+
+
+def test_plan_runtime_branch_goes_through_branch_name(workdir: Path, fixtures_dir: Path):
+    osv = from_fixture(fixtures_dir / "osv_go_stdlib.json")
+    drift = detect_runtime_drift(workdir, osv, workdir / "go.mod")
+    p = plan_runtime(workdir, drift, workdir / "go.mod")
+    assert p.branch.startswith("sentinel/go/")
+    assert p.branch != "sentinel/go/runtime-1.25.11"  # hashed, not the raw f-string
+
+
+def test_run_routes_unsafe_runtime_target_to_issue(workdir: Path, monkeypatch):
+    # run()'s runtime path must open an issue (not crash) on an unsafe target,
+    # mirroring the module path and the gh-release-pin run() fallback.
+    import scripts.scope_go as go_mod
+    from scripts.config import Config
+
+    unsafe = Drift(
+        scope="go",
+        key="runtime-x",
+        summary="s",
+        fixed_versions=["1.25.0 ; evil"],
+        current="1.24.4",
+        severity="high",
+        raw={"advisory_ids": ["GO-X"], "target": "1.25.0 ; evil"},
+    )
+    monkeypatch.setattr(go_mod, "detect_module_drifts", lambda *a, **k: [])
+    monkeypatch.setattr(go_mod, "detect_runtime_drift", lambda *a, **k: unsafe)
+    results = go_mod.run(workdir, Config(), OsvCache({"results": []}), dry_run=True)
+    assert len(results) == 1
+    assert results[0].kind == "noop"
+    assert "unsafe" in results[0].summary.lower()
