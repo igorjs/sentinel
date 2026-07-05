@@ -262,14 +262,26 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                     )
                 )
             else:
-                results.append(
-                    apply_plan(
-                        p,
-                        dry_run=dry_run,
-                        workdir=workdir,
-                        pr_labels=config.defaults.pr_labels,
+                try:
+                    results.append(
+                        apply_plan(
+                            p,
+                            dry_run=dry_run,
+                            workdir=workdir,
+                            pr_labels=config.defaults.pr_labels,
+                        )
                     )
-                )
+                except subprocess.CalledProcessError as e:
+                    results.append(
+                        open_issue_fallback(
+                            scope=SCOPE,
+                            key=runtime_drift.key,
+                            title=f"sentinel: go runtime bump blocked for {runtime_drift.key}",
+                            body=f"Applying the Go runtime bump failed (exit {e.returncode}). Manual review needed.",
+                            dry_run=dry_run,
+                            workdir=workdir,
+                        )
+                    )
         else:
             advisories = runtime_drift.raw["advisory_ids"]
             target = runtime_drift.raw["target"]

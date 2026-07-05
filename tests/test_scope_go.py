@@ -1,3 +1,4 @@
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -193,3 +194,29 @@ def test_run_routes_symlink_escape_gomod_to_issue(tmp_path: Path):
     assert len(results) == 1
     assert results[0].kind == "noop"
     assert "unsafe" in results[0].summary.lower()
+
+
+def test_run_routes_runtime_apply_failure_to_issue(workdir: Path, monkeypatch):
+    import scripts.scope_go as go_mod
+    from scripts.config import Config
+
+    drift = Drift(
+        scope="go",
+        key="runtime-x",
+        summary="s",
+        fixed_versions=["1.25.11"],
+        current="1.24.4",
+        severity="high",
+        raw={"advisory_ids": ["GO-X"], "target": "1.25.11"},
+    )
+    monkeypatch.setattr(go_mod, "detect_module_drifts", lambda *a, **k: [])
+    monkeypatch.setattr(go_mod, "detect_runtime_drift", lambda *a, **k: drift)
+
+    def _boom(*a, **k):
+        raise subprocess.CalledProcessError(1, ["git", "push"])
+
+    monkeypatch.setattr(go_mod, "apply_plan", _boom)
+    results = go_mod.run(workdir, Config(), OsvCache({"results": []}), dry_run=True)
+    assert len(results) == 1
+    assert results[0].kind == "noop"  # dry-run issue
+    assert "blocked" in results[0].summary.lower()
