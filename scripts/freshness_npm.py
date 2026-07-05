@@ -116,11 +116,11 @@ def _bump_manifest(workdir: Path, majors: list[Selection]) -> None:
 
 def apply(workdir: Path, selections: list[Selection]) -> None:
     ensure_safe(*[s.name for s in selections], *[s.target for s in selections])
-    in_range = [s for s in selections if not s.is_major]
-    majors = [s for s in selections if s.is_major]
+    in_range = [s for s in selections if not s.crosses_range]
+    out_of_range = [s for s in selections if s.crosses_range]
     if in_range:
         names = [s.name for s in in_range]
         _run_npm(["npm", "update", *names, "--package-lock-only", "--ignore-scripts"], workdir)
-    if majors:
-        _bump_manifest(workdir, majors)
+    if out_of_range:
+        _bump_manifest(workdir, out_of_range)
         _run_npm(["npm", "install", "--package-lock-only", "--ignore-scripts"], workdir)

@@ -40,7 +40,7 @@ class Selection:
     name: str
     current: str
     target: str
-    is_major: bool
+    crosses_range: bool
 
 
 def _vgt(a: str, b: str) -> bool:
@@ -62,12 +62,14 @@ def select(
             continue
         if any(fnmatch(o.name, pat) for pat in exclude):
             continue
-        target, is_major = o.wanted, False
+        target, crosses_range = o.wanted, False
         if level == "major" and _vgt(o.latest, o.wanted):
-            target, is_major = o.latest, True
+            target, crosses_range = o.latest, True
         if target == o.current:
             continue
-        out.append(Selection(name=o.name, current=o.current, target=target, is_major=is_major))
+        out.append(
+            Selection(name=o.name, current=o.current, target=target, crosses_range=crosses_range)
+        )
     return sorted(out, key=lambda s: s.name)
 
 
@@ -82,7 +84,7 @@ def _dependabot_note(workdir) -> str:
 
 def _body(selections: list[Selection], note: str) -> str:
     lines = "\n".join(
-        f"- `{s.name}`: {s.current} -> {s.target}" + (" (major)" if s.is_major else "")
+        f"- `{s.name}`: {s.current} -> {s.target}" + (" (out of range)" if s.crosses_range else "")
         for s in selections
     )
     parts = [lines]

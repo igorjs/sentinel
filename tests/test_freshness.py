@@ -46,9 +46,9 @@ def test_select_in_range_default():
 def test_select_major_opt_in():
     sel = select(_O, level="major", include=[], exclude=[])
     by = {s.name: s for s in sel}
-    assert by["lodash"].target == "5.0.0" and by["lodash"].is_major is True
-    assert by["@types/node"].target == "20.1.0" and by["@types/node"].is_major is True
-    assert by["express"].target == "4.18.2" and by["express"].is_major is False
+    assert by["lodash"].target == "5.0.0" and by["lodash"].crosses_range is True
+    assert by["@types/node"].target == "20.1.0" and by["@types/node"].crosses_range is True
+    assert by["express"].target == "4.18.2" and by["express"].crosses_range is False
 
 
 def test_select_exclude_glob():
@@ -175,3 +175,12 @@ def test_run_unsafe_identifier_opens_issue(tmp_path):
     bad = [Outdated("-rf", "1.0.0", "2.0.0", "2.0.0")]
     results = F.run(tmp_path, _cfg(), dry_run=True, adapter=_FakeAdapter(bad))
     assert len(results) == 1 and results[0].key == "javascript-freshness"
+
+
+def test_body_labels_range_crossing_bump_out_of_range_not_major():
+    from scripts.freshness import Selection, _body
+
+    sels = [Selection(name="express", current="4.18.0", target="4.19.0", crosses_range=True)]
+    body = _body(sels, "")
+    assert "(out of range)" in body
+    assert "(major)" not in body
