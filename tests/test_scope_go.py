@@ -176,3 +176,20 @@ def test_run_routes_unsafe_runtime_target_to_issue(workdir: Path, monkeypatch):
     assert len(results) == 1
     assert results[0].kind == "noop"
     assert "unsafe" in results[0].summary.lower()
+
+
+def test_run_routes_symlink_escape_gomod_to_issue(tmp_path: Path):
+    # A go.mod symlink escaping the workspace passes the load reject (relative
+    # path) but must be caught at the use site and open an issue, not crash.
+    import scripts.scope_go as go_mod
+    from scripts.config import Config
+
+    outside = tmp_path / "outside.mod"
+    outside.write_text("module x\ngo 1.24.4\n")
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "go.mod").symlink_to(outside)
+    results = go_mod.run(work, Config(), OsvCache({"results": []}), dry_run=True)
+    assert len(results) == 1
+    assert results[0].kind == "noop"
+    assert "unsafe" in results[0].summary.lower()

@@ -20,13 +20,18 @@ runs:
 
     - id: run
       shell: bash
+      env:
+        CONFIG_PATH: ${{ inputs.config_path }}
       run: |
         set -euo pipefail
-        # Invoke as a module from the action root so scripts/ is never sys.path[0]
-        # (a file-path invocation shadows the stdlib `types` module).
+        # Run as a module from the action root so scripts/ is never sys.path[0].
         cd "${{ github.action_path }}/.."
         SCOPES=$(python -m scripts.sentinel \
           --mode discover \
-          --config "${{ inputs.config_path }}" \
+          --config "$CONFIG_PATH" \
           --workdir "${{ github.workspace }}")
-        echo "scopes=$SCOPES" >> "$GITHUB_OUTPUT"
+        {
+          echo "scopes<<SENTINEL_EOF"
+          echo "$SCOPES"
+          echo "SENTINEL_EOF"
+        } >> "$GITHUB_OUTPUT"

@@ -55,6 +55,30 @@ def test_discover_action_invokes_cli_as_module():
     )
 
 
+def test_action_passes_inputs_via_env_not_shell_interpolation():
+    text = _ACTION.read_text()
+    # Inputs reach the CLI through env vars, never interpolated into the shell
+    # command (that would let a caller inject shell via a malicious input).
+    assert '--scope "$SCOPE"' in text
+    assert '--config "$CONFIG_PATH"' in text
+    assert '--scope "${{ inputs.scope }}"' not in text
+    assert '--config "${{ inputs.config_path }}"' not in text
+    # dry_run is the most injection-sensitive input (it lands in an `if [[ ]]`).
+    assert '"$DRY_RUN" == "true"' in text
+    assert '"${{ inputs.dry_run }}" == "true"' not in text
+    assert "SCOPE: ${{ inputs.scope }}" in text
+    assert "CONFIG_PATH: ${{ inputs.config_path }}" in text
+    assert "DRY_RUN: ${{ inputs.dry_run }}" in text
+
+
+def test_discover_action_passes_config_via_env_and_heredoc():
+    text = _DISCOVER_ACTION.read_text()
+    assert '--config "$CONFIG_PATH"' in text
+    assert '--config "${{ inputs.config_path }}"' not in text
+    assert "scopes<<" in text  # heredoc GITHUB_OUTPUT write, not a single-line echo
+    assert "CONFIG_PATH: ${{ inputs.config_path }}" in text
+
+
 def test_cli_runs_as_module_from_action_root_without_pythonpath(tmp_path: Path):
     # Mirror the action's exact mechanism: cwd is the action root and PYTHONPATH
     # is unset, so success depends solely on `-m` adding the action root to

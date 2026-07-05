@@ -117,3 +117,26 @@ def test_detect_finds_newer_calver_upstream(tmp_path, fixtures_dir):
     assert len(drifts) == 1
     assert drifts[0].current == "2024.01.01"
     assert drifts[0].fixed_versions == ["2024.02.01"]
+
+
+def test_run_routes_symlink_escape_target_file_to_issue(tmp_path):
+    # A target_file symlink escaping the workspace must open an issue, not crash.
+    outside = tmp_path / "outside.yml"
+    outside.write_text("env:\n  V: 0.1.0\n")
+    work = tmp_path / "work"
+    (work / ".github" / "workflows").mkdir(parents=True)
+    (work / ".github" / "workflows" / "release.yml").symlink_to(outside)
+    esc = CustomScope(
+        name="escaper",
+        kind="gh-release-pin",
+        extra={
+            "upstream_repo": "o/r",
+            "target_file": ".github/workflows/release.yml",
+            "target_kind": "yaml-env-var",
+            "env_var": "V",
+        },
+    )
+    results = run(work, Config(custom=[esc]), None, dry_run=True)
+    assert len(results) == 1
+    assert results[0].kind == "noop"
+    assert "unsafe" in results[0].summary.lower()

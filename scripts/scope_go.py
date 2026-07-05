@@ -9,6 +9,7 @@ from pathlib import Path
 from scripts.config import Config, effective_min_severity
 from scripts.models import Drift, Plan, Result
 from scripts.osv import OsvCache
+from scripts.paths import UnsafePath, resolve_within
 from scripts.pr import (
     apply_plan,
     branch_name,
@@ -185,7 +186,20 @@ def plan_runtime(workdir: Path, drift: Drift, gomod_path: Path) -> Plan:
 
 def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[Result]:
     override = config.scopes.get(SCOPE)
-    gomod_path = workdir / (override.gomod_path if override and override.gomod_path else "go.mod")
+    rel = override.gomod_path if override and override.gomod_path else "go.mod"
+    try:
+        gomod_path = resolve_within(workdir, rel)
+    except UnsafePath as e:
+        return [
+            open_issue_fallback(
+                scope=SCOPE,
+                key="config",
+                title="sentinel: go unsafe gomod_path",
+                body=f"{e}. Fix `gomod_path` in sentinel.toml.",
+                dry_run=dry_run,
+                workdir=workdir,
+            )
+        ]
     update_runtime = override.update_runtime if override else True
 
     results: list[Result] = []

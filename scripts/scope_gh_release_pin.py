@@ -9,6 +9,7 @@ from pathlib import Path
 from scripts.config import Config, CustomScope
 from scripts.models import Drift, Plan, Result
 from scripts.osv import OsvCache
+from scripts.paths import UnsafePath, resolve_within
 from scripts.pr import apply_plan, branch_name, open_issue_fallback, open_unsafe_identifier_issue
 from scripts.target_yaml_env_var import read_value, write_value
 from scripts.validate import UnsafeIdentifier, ensure_safe
@@ -36,7 +37,7 @@ def detect(
     # Resolve at call time (not as a default arg) so run() and tests can swap it.
     resolve = latest_resolver or _gh_latest
     upstream_repo = custom.extra["upstream_repo"]
-    target_file = workdir / custom.extra["target_file"]
+    target_file = resolve_within(workdir, custom.extra["target_file"])
     if not target_file.exists():
         return []
     target_kind = custom.extra["target_kind"]
@@ -114,6 +115,18 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
                         f"`{custom.extra.get('upstream_repo', '?')}` (exit {e.returncode}). "
                         "Manual review needed."
                     ),
+                    dry_run=dry_run,
+                    workdir=workdir,
+                )
+            )
+            continue
+        except UnsafePath as e:
+            results.append(
+                open_issue_fallback(
+                    scope=SCOPE,
+                    key=custom.name,
+                    title=f"sentinel: {custom.name} unsafe target_file",
+                    body=f"{e}. Fix `target_file` in sentinel.toml.",
                     dry_run=dry_run,
                     workdir=workdir,
                 )

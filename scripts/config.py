@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from scripts.severity import SEVERITY_ORDER
@@ -60,6 +60,16 @@ def _validate_lead_days(value: Any, *, where: str) -> int:
 def _validate_choice(value: Any, allowed: set[str], *, where: str) -> str:
     if value not in allowed:
         raise ConfigError(f"{where} must be one of {sorted(allowed)}, got {value!r}")
+    return value
+
+
+def _reject_unsafe_path(value: str, *, where: str) -> str:
+    p = PurePosixPath(value)
+    if p.is_absolute() or ".." in p.parts:
+        raise ConfigError(
+            f"{where} must be a relative path inside the workspace "
+            f"(no leading '/', no '..'), got {value!r}"
+        )
     return value
 
 
@@ -148,9 +158,12 @@ def load_config(path: Path | None) -> Config:
             if f_exclude is not None
             else []
         )
+        gomod = spec.get("gomod_path")
+        if gomod is not None:
+            _reject_unsafe_path(str(gomod), where=f"scopes.{name}.gomod_path")
         cfg.scopes[name] = ScopeOverride(
             enabled=bool(spec.get("enabled", True)),
-            gomod_path=spec.get("gomod_path"),
+            gomod_path=gomod,
             update_runtime=bool(spec.get("update_runtime", False)),
             min_severity=min_sev,
             runtime_eol_lead_days=lead,
@@ -174,6 +187,9 @@ def load_config(path: Path | None) -> Config:
             raise ConfigError(
                 f"custom[{i}] (kind={kind!r}): missing required key(s): {sorted(missing_extra)}"
             )
+        target_file = raw.get("target_file")
+        if isinstance(target_file, str):
+            _reject_unsafe_path(target_file, where=f"custom[{i}].target_file")
         cfg.custom.append(
             CustomScope(
                 name=str(raw["name"]),

@@ -235,3 +235,28 @@ def test_freshness_include_must_be_list(tmp_path):
 
     with pytest.raises(ConfigError):
         load_config(p)
+
+
+def test_gomod_path_absolute_rejected(tmp_path: Path):
+    p = tmp_path / "bad.toml"
+    p.write_text('[scopes.go]\ngomod_path = "/etc/passwd"\n')
+    with pytest.raises(ConfigError, match="workspace"):
+        load_config(p)
+
+
+def test_gomod_path_traversal_rejected(tmp_path: Path):
+    p = tmp_path / "bad.toml"
+    p.write_text('[scopes.go]\ngomod_path = "../../etc/passwd"\n')
+    with pytest.raises(ConfigError, match="workspace"):
+        load_config(p)
+
+
+def test_custom_target_file_traversal_rejected(tmp_path: Path):
+    p = tmp_path / "bad.toml"
+    p.write_text(
+        '[[custom]]\nname = "x"\nkind = "gh-release-pin"\n'
+        'upstream_repo = "o/r"\ntarget_file = "../../../etc/cron.d/x"\n'
+        'target_kind = "yaml-env-var"\nenv_var = "V"\n'
+    )
+    with pytest.raises(ConfigError, match="workspace"):
+        load_config(p)
