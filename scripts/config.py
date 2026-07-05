@@ -119,8 +119,11 @@ class Config:
 def load_config(path: Path | None) -> Config:
     if path is None or not path.exists():
         return Config()
-    with path.open("rb") as f:
-        data = tomllib.load(f)
+    try:
+        with path.open("rb") as f:
+            data = tomllib.load(f)
+    except tomllib.TOMLDecodeError as e:
+        raise ConfigError(f"{path} is not valid TOML: {e}") from e
     _reject_unknown(data, _ALLOWED_TOP, where="top-level")
 
     cfg = Config()

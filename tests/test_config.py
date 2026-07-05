@@ -260,3 +260,10 @@ def test_custom_target_file_traversal_rejected(tmp_path: Path):
     )
     with pytest.raises(ConfigError, match="workspace"):
         load_config(p)
+
+
+def test_malformed_toml_raises_config_error(tmp_path: Path):
+    p = tmp_path / "bad.toml"
+    p.write_text("this is = not valid = toml\n")
+    with pytest.raises(ConfigError):
+        load_config(p)

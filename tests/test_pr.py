@@ -174,6 +174,16 @@ def test_apply_plan_defaults_pr_labels(tmp_path, monkeypatch):
     assert "dependencies" in create and "automated" in create
 
 
+def test_run_converts_timeout_to_called_process_error(monkeypatch):
+    def _timeout(*a, **k):
+        raise subprocess.TimeoutExpired(cmd=["git", "push"], timeout=1)
+
+    monkeypatch.setattr(subprocess, "run", _timeout)
+    with pytest.raises(subprocess.CalledProcessError) as exc:
+        pr_mod._run(["git", "push"], cwd=".")
+    assert exc.value.returncode == 124
+
+
 def test_apply_plan_restores_head_to_original_ref(tmp_path, monkeypatch):
     """apply_plan must leave HEAD on the original ref, not the PR branch.
 
@@ -205,3 +215,37 @@ def test_apply_plan_restores_head_to_original_ref(tmp_path, monkeypatch):
         for c in calls[switch_idx + 1 :]
     )
     assert restored, f"HEAD was not restored to the original ref; calls={calls}"
+
+
+def test_apply_plan_updates_existing_pr(tmp_path, monkeypatch):
+    """When gh pr list returns an open PR, apply_plan edits it instead of creating a new one."""
+    calls: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        if cmd[:2] == ["git", "symbolic-ref"]:
+            return subprocess.CompletedProcess(cmd, 0, "main\n", "")
+        if cmd[:3] == ["git", "diff", "--quiet"]:
+            return subprocess.CompletedProcess(cmd, 1, "", "")  # changes present
+        if cmd[:3] == ["git", "status", "--porcelain"]:
+            return subprocess.CompletedProcess(cmd, 0, " M file.txt\n", "")
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return subprocess.CompletedProcess(cmd, 0, '[{"number": 7}]', "")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(pr_mod.subprocess, "run", fake_run)
+    pr_mod.apply_plan(_plan(), dry_run=False, workdir=tmp_path)
+
+    assert any(c[:3] == ["gh", "pr", "edit"] and "7" in c for c in calls)
+    assert not any(c[:3] == ["gh", "pr", "create"] for c in calls)
+
+
+def test_restore_ref_swallows_timeout(monkeypatch):
+    """_restore_ref must not propagate a TimeoutExpired raised by subprocess.run."""
+
+    def _raise_timeout(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=1)
+
+    monkeypatch.setattr(pr_mod.subprocess, "run", _raise_timeout)
+    # Must return without raising — best-effort restore ignores timeout
+    pr_mod._restore_ref("main", ".")
