@@ -18,6 +18,7 @@ from scripts import (
 )
 from scripts.config import Config, load_config, update_runtime_enabled
 from scripts.osv import OsvCache
+from scripts.paths import UnsafePath, resolve_within
 
 BUILTIN_SCOPES = {
     "rust": scope_rust,
@@ -51,12 +52,18 @@ def main(argv: list[str] | None = None) -> int:
     return _run_scope(workdir, config, args.scope, dry_run=args.dry_run)
 
 
+def _go_present(workdir: Path, config: Config) -> bool:
+    try:
+        return resolve_within(workdir, _gomod_path(config)).exists()
+    except UnsafePath:
+        return False
+
+
 def _discover(workdir: Path, config: Config) -> list[str]:
     enabled: list[str] = []
     if _is_enabled(config, "rust") and (workdir / "Cargo.lock").exists():
         enabled.append("rust")
-    gomod = workdir / _gomod_path(config)
-    if _is_enabled(config, "go") and gomod.exists():
+    if _is_enabled(config, "go") and _go_present(workdir, config):
         enabled.append("go")
     if _is_enabled(config, "javascript") and (workdir / "package.json").exists():
         enabled.append("javascript")

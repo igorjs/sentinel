@@ -4,6 +4,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scripts.sentinel import main
+
 _PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 
 
@@ -119,14 +121,11 @@ def test_discover_no_ci_without_workflows(tmp_path: Path):
 
 
 def test_run_mode_unknown_scope_returns_2(tmp_path: Path):
-    from scripts.sentinel import main
-
     assert main(["--mode", "run", "--scope", "bogus-unknown", "--workdir", str(tmp_path)]) == 2
 
 
 def test_run_mode_builtin_python_empty_project_returns_0(tmp_path: Path, monkeypatch):
     import scripts.osv as osv_mod
-    from scripts.sentinel import main
 
     monkeypatch.setattr(
         osv_mod.OsvCache,
@@ -134,3 +133,19 @@ def test_run_mode_builtin_python_empty_project_returns_0(tmp_path: Path, monkeyp
         lambda workdir: osv_mod.OsvCache({"results": []}),
     )
     assert main(["--mode", "run", "--scope", "python", "--workdir", str(tmp_path)]) == 0
+
+
+def test_discover_ignores_symlink_escaping_gomod(tmp_path: Path, capsys):
+    outside = tmp_path / "outside.mod"
+    outside.write_text("module x\ngo 1.24\n")
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "go.mod").symlink_to(outside)
+    main(["--mode", "discover", "--workdir", str(work)])
+    assert "go" not in json.loads(capsys.readouterr().out)
+
+
+def test_discover_finds_normal_gomod(tmp_path: Path, capsys):
+    (tmp_path / "go.mod").write_text("module x\ngo 1.24\n")
+    main(["--mode", "discover", "--workdir", str(tmp_path)])
+    assert "go" in json.loads(capsys.readouterr().out)
