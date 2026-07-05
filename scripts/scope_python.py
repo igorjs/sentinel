@@ -29,6 +29,11 @@ from scripts.version import pypi_key
 
 SCOPE = "python"
 
+
+class DowngradeBlocked(ValueError):
+    """Every fix would pin the dependency below the project's existing floor."""
+
+
 _PM_BY_LOCKFILE = [
     ("uv.lock", "uv"),
     ("poetry.lock", "poetry"),
@@ -142,6 +147,10 @@ def _select_pyproject_fix(pyproject_path: Path, module: str, fixed_versions: lis
         above = [v for v in fixed_versions if pypi_key(v) >= pypi_key(lower)]
         if above:
             return above[0]
+        raise DowngradeBlocked(
+            f"no fix for {module} is at or above the project's floor {lower!r}; "
+            "auto-bumping would downgrade below the required version"
+        )
     return fixed_versions[0]
 
 
@@ -257,6 +266,22 @@ def run(workdir: Path, config: Config, osv: OsvCache, *, dry_run: bool) -> list[
             results.append(
                 open_unsafe_identifier_issue(
                     scope=SCOPE, key=drift.key, error=e, dry_run=dry_run, workdir=workdir
+                )
+            )
+            continue
+        except DowngradeBlocked as e:
+            results.append(
+                open_issue_fallback(
+                    scope=SCOPE,
+                    key=drift.key,
+                    title=f"sentinel: python bump for {drift.key} would downgrade",
+                    body=(
+                        f"{e}. The advisory's fixes are all below the version this "
+                        "project already requires, so sentinel will not auto-bump. "
+                        "Manual review needed."
+                    ),
+                    dry_run=dry_run,
+                    workdir=workdir,
                 )
             )
             continue

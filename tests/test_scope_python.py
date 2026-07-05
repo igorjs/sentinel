@@ -274,15 +274,36 @@ def test_plan_pyproject_picks_smallest_in_range_fix(tmp_path: Path):
     assert "widget==1.26.5" in (tmp_path / "pyproject.toml").read_text()
 
 
-def test_plan_pyproject_crosses_bound_when_no_fix_in_range(tmp_path: Path):
-    # Constraint <2 but the only fix is 2.0.1: must widen to fix the vuln.
-    _write_pyproject(tmp_path, "widget>=1.20,<2")
-    osv = _osv_two_branch_fixes("widget", ["2.0.1"])
+def test_plan_pyproject_crosses_bound_no_in_range_fix(tmp_path: Path):
+    # Floor 1.30 with an upper bound; no fix is in [1.30, 2). The smallest fix
+    # (1.26.5) would downgrade below the floor, so pick the smallest fix >= floor.
+    _write_pyproject(tmp_path, "widget>=1.30,<2")
+    osv = _osv_two_branch_fixes("widget", ["1.26.5", "2.0.1"])
     drift = detect(tmp_path, osv)[0]
     p = plan(tmp_path, drift, "pyproject")
     for step in p.post_steps:
         step()
-    assert "widget==2.0.1" in (tmp_path / "pyproject.toml").read_text()
+    text = (tmp_path / "pyproject.toml").read_text()
+    assert "widget==2.0.1" in text
+    assert "1.26.5" not in text
+
+
+def test_plan_pyproject_blocks_downgrade_when_no_fix_reaches_floor(tmp_path: Path):
+    # Project floor above every fix: refuse to pin a downgrade.
+    from scripts.scope_python import DowngradeBlocked
+
+    _write_pyproject(tmp_path, "widget>=5.0")
+    osv = _osv_two_branch_fixes("widget", ["1.2.0", "2.0.0"])
+    drift = detect(tmp_path, osv)[0]
+    with pytest.raises(DowngradeBlocked):
+        plan(tmp_path, drift, "pyproject")
+
+
+def test_run_pyproject_downgrade_blocked_opens_issue(tmp_path: Path):
+    _write_pyproject(tmp_path, "widget>=5.0")
+    osv = _osv_two_branch_fixes("widget", ["1.2.0", "2.0.0"])
+    results = run(tmp_path, Config(), osv, dry_run=True)
+    assert any("downgrade" in r.summary.lower() for r in results)
 
 
 def test_plan_pyproject_no_constraint_uses_smallest_fix(tmp_path: Path):
