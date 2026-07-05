@@ -215,6 +215,86 @@ def test_run_no_runtime_pr_when_opted_out(tmp_path):
     assert [r for r in results if r.key == "runtime-eol"] == []
 
 
+def _osv_two_branch_fixes(module: str, fixes: list[str]) -> OsvCache:
+    ranges = [
+        {"events": [{"introduced": "0" if i == 0 else f"{v.split('.')[0]}.0.0"}, {"fixed": v}]}
+        for i, v in enumerate(fixes)
+    ]
+    return OsvCache(
+        {
+            "results": [
+                {
+                    "packages": [
+                        {
+                            "package": {"ecosystem": "PyPI", "name": module},
+                            "vulnerabilities": [
+                                {
+                                    "id": "PYSEC-DG",
+                                    "summary": "s",
+                                    "affected": [{"package": {"name": module}, "ranges": ranges}],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+
+
+def _write_pyproject(tmp_path: Path, dep: str) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        f'[project]\nname = "t"\nversion = "1.0.0"\ndependencies = ["{dep}"]\n'
+    )
+
+
+def test_plan_pyproject_avoids_downgrade(tmp_path: Path):
+    # Floor is 2.x; the advisory fixes both branches. Pinning the 1.x fix would
+    # downgrade below the floor.
+    _write_pyproject(tmp_path, "widget>=2.0")
+    osv = _osv_two_branch_fixes("widget", ["1.26.5", "2.0.1"])
+    drift = detect(tmp_path, osv)[0]
+    assert drift.fixed_versions == ["1.26.5", "2.0.1"]
+    p = plan(tmp_path, drift, "pyproject")
+    for step in p.post_steps:
+        step()
+    text = (tmp_path / "pyproject.toml").read_text()
+    assert "widget==2.0.1" in text
+    assert "1.26.5" not in text
+
+
+def test_plan_pyproject_picks_smallest_in_range_fix(tmp_path: Path):
+    # Floor 1.20 with an upper bound: take the smallest in-range fix, not a jump.
+    _write_pyproject(tmp_path, "widget>=1.20,<2")
+    osv = _osv_two_branch_fixes("widget", ["1.26.5", "2.0.1"])
+    drift = detect(tmp_path, osv)[0]
+    p = plan(tmp_path, drift, "pyproject")
+    for step in p.post_steps:
+        step()
+    assert "widget==1.26.5" in (tmp_path / "pyproject.toml").read_text()
+
+
+def test_plan_pyproject_crosses_bound_when_no_fix_in_range(tmp_path: Path):
+    # Constraint <2 but the only fix is 2.0.1: must widen to fix the vuln.
+    _write_pyproject(tmp_path, "widget>=1.20,<2")
+    osv = _osv_two_branch_fixes("widget", ["2.0.1"])
+    drift = detect(tmp_path, osv)[0]
+    p = plan(tmp_path, drift, "pyproject")
+    for step in p.post_steps:
+        step()
+    assert "widget==2.0.1" in (tmp_path / "pyproject.toml").read_text()
+
+
+def test_plan_pyproject_no_constraint_uses_smallest_fix(tmp_path: Path):
+    _write_pyproject(tmp_path, "widget")
+    osv = _osv_two_branch_fixes("widget", ["1.26.5", "2.0.1"])
+    drift = detect(tmp_path, osv)[0]
+    p = plan(tmp_path, drift, "pyproject")
+    for step in p.post_steps:
+        step()
+    assert "widget==1.26.5" in (tmp_path / "pyproject.toml").read_text()
+
+
 def test_detect_orders_pep440_prereleases(workdir: Path):
     # A PEP 440 prerelease is not hyphenated, so the old comparator sorted
     # "2.0.0rc1" ABOVE "2.0.0". detect() must order it below.

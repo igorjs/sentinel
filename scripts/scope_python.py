@@ -5,7 +5,12 @@ from __future__ import annotations
 
 import re
 import subprocess
+import tomllib
 from pathlib import Path
+
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.specifiers import SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from scripts import runtime
 from scripts.config import Config, effective_min_severity
@@ -90,9 +95,62 @@ def detect(workdir: Path, osv: OsvCache) -> list[Drift]:
     return drifts
 
 
+def _current_spec(pyproject_path: Path, module: str) -> SpecifierSet | None:
+    """The version specifier for ``module`` in [project.dependencies], or None."""
+    try:
+        doc = tomllib.loads(pyproject_path.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    target = module.lower().replace("_", "-")
+    for raw in doc.get("project", {}).get("dependencies") or []:
+        try:
+            req = Requirement(str(raw))
+        except InvalidRequirement:
+            continue
+        if req.name.lower().replace("_", "-") == target:
+            return req.specifier if len(req.specifier) else None
+    return None
+
+
+def _lower_bound(spec: SpecifierSet) -> str | None:
+    """The highest lower-edge version across the specifier's >=, ==, ~=, > clauses."""
+    lowers: list[Version] = []
+    for s in spec:
+        if s.operator in (">=", "==", "~=", ">"):
+            try:
+                lowers.append(Version(s.version))
+            except InvalidVersion:
+                continue
+    return str(max(lowers)) if lowers else None
+
+
+def _select_pyproject_fix(pyproject_path: Path, module: str, fixed_versions: list[str]) -> str:
+    """Pick the fix to pin without downgrading below the project's constraint.
+
+    ``fixed_versions`` is sorted ascending. Prefer the smallest fix that
+    satisfies the current constraint; if none does (the fix must cross it), the
+    smallest fix at or above the constraint's lower bound; else the smallest fix.
+    """
+    spec = _current_spec(pyproject_path, module)
+    if spec is None:
+        return fixed_versions[0]
+    satisfying = [v for v in fixed_versions if spec.contains(v, prereleases=True)]
+    if satisfying:
+        return satisfying[0]
+    lower = _lower_bound(spec)
+    if lower is not None:
+        above = [v for v in fixed_versions if pypi_key(v) >= pypi_key(lower)]
+        if above:
+            return above[0]
+    return fixed_versions[0]
+
+
 def plan(workdir: Path, drift: Drift, pkg_manager: str, *, clean_suppressions: bool = True) -> Plan:
     module = drift.raw["module"]
-    fix = drift.fixed_versions[0]
+    if pkg_manager == "pyproject":
+        fix = _select_pyproject_fix(workdir / "pyproject.toml", module, drift.fixed_versions)
+    else:
+        fix = drift.fixed_versions[0]
     ensure_safe(module, fix)
     cleanup = osv_scanner_cleanup_step(workdir, drift.key) if clean_suppressions else None
     title = f"{drift.key}: bump {module} to {fix}"
