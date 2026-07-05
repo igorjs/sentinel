@@ -111,7 +111,9 @@ def eol_target(
     Target = oldest still-supported cycle strictly newer than current_cycle
     (LTS even-major only when lts_only).
     """
-    cycles = [c for c in cycles if isinstance(c.get("cycle"), str) and _CYCLE_RE.match(c["cycle"])]
+    cycles = [
+        c for c in cycles if isinstance(c.get("cycle"), str) and _CYCLE_RE.fullmatch(c["cycle"])
+    ]
     by_cycle = {c["cycle"]: c for c in cycles}
     current = by_cycle.get(current_cycle)
     if current is None:
@@ -129,7 +131,14 @@ def eol_target(
     if not candidates:
         return None
     target = min(candidates, key=lambda c: _cycle_key(c["cycle"]))
-    return target["cycle"], str(target.get("latest", target["cycle"]))
+    # `latest` is third-party (endoflife.date) and callers write it verbatim into
+    # Dockerfiles / pin files. Validate it like `cycle`; if it isn't a plain
+    # numeric version, fall back to the already-validated cycle so a poisoned
+    # value can't inject a newline or an extra instruction.
+    latest = str(target.get("latest", target["cycle"]))
+    if not _CYCLE_RE.fullmatch(latest):
+        latest = target["cycle"]
+    return target["cycle"], latest
 
 
 _API = "https://endoflife.date/api/{product}.json"

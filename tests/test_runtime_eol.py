@@ -184,3 +184,46 @@ def test_eol_target_invalid_eol_string_is_safe():
     today = date(2026, 1, 1)
     # current cycle's eol is garbage -> not in window -> None, no crash
     assert eol_target(cycles, "3.8", today=today, lead_days=30, lts_only=False) is None
+
+
+def test_eol_target_rejects_poisoned_latest():
+    # A hostile endoflife.date `latest` with a newline must not pass through;
+    # it falls back to the validated cycle so callers can't be injected.
+    cycles = [
+        {"cycle": "3.11", "eol": "2020-01-01", "latest": "3.11.9"},
+        {"cycle": "3.12", "eol": "2099-01-01", "latest": "3.12.4\nRUN evil"},
+    ]
+    tc, tl = eol_target(cycles, "3.11", today=date(2026, 1, 1), lead_days=30, lts_only=False)
+    assert tc == "3.12"
+    assert tl == "3.12"
+    assert "\n" not in tl
+
+
+def test_eol_target_keeps_valid_latest():
+    cycles = [
+        {"cycle": "3.11", "eol": "2020-01-01", "latest": "3.11.9"},
+        {"cycle": "3.12", "eol": "2099-01-01", "latest": "3.12.4"},
+    ]
+    tc, tl = eol_target(cycles, "3.11", today=date(2026, 1, 1), lead_days=30, lts_only=False)
+    assert (tc, tl) == ("3.12", "3.12.4")
+
+
+def test_eol_target_rejects_trailing_newline_latest():
+    # `$` matches before a trailing newline, so re.match would let "3.12.4\n"
+    # through; fullmatch rejects it and falls back to the validated cycle.
+    cycles = [
+        {"cycle": "3.11", "eol": "2020-01-01", "latest": "3.11.9"},
+        {"cycle": "3.12", "eol": "2099-01-01", "latest": "3.12.4\n"},
+    ]
+    tc, tl = eol_target(cycles, "3.11", today=date(2026, 1, 1), lead_days=30, lts_only=False)
+    assert (tc, tl) == ("3.12", "3.12")
+
+
+def test_eol_target_rejects_trailing_newline_cycle():
+    # A poisoned cycle "3.12\n" must be filtered out: int() strips the newline in
+    # the sort key, so re.match would select it and write it verbatim into files.
+    cycles = [
+        {"cycle": "3.11", "eol": "2020-01-01", "latest": "3.11.9"},
+        {"cycle": "3.12\n", "eol": "2099-01-01", "latest": "3.12.4"},
+    ]
+    assert eol_target(cycles, "3.11", today=date(2026, 1, 1), lead_days=30, lts_only=False) is None
