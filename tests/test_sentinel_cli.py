@@ -116,3 +116,21 @@ def test_discover_no_ci_without_workflows(tmp_path: Path):
     cfg.write_text("[scopes.ci]\nupdate_runtime = true\n")
     result = run_cli("--mode", "discover", "--config", "sentinel.toml", cwd=tmp_path)
     assert "ci" not in json.loads(result.stdout.strip())
+
+
+def test_run_mode_unknown_scope_returns_2(tmp_path: Path):
+    from scripts.sentinel import main
+
+    assert main(["--mode", "run", "--scope", "bogus-unknown", "--workdir", str(tmp_path)]) == 2
+
+
+def test_run_mode_builtin_python_empty_project_returns_0(tmp_path: Path, monkeypatch):
+    import scripts.osv as osv_mod
+    from scripts.sentinel import main
+
+    monkeypatch.setattr(
+        osv_mod.OsvCache,
+        "scan_with_recovery",
+        lambda workdir: osv_mod.OsvCache({"results": []}),
+    )
+    assert main(["--mode", "run", "--scope", "python", "--workdir", str(tmp_path)]) == 0
