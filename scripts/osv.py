@@ -23,6 +23,8 @@ _NOT_FOUND_MSG = (
     "(https://github.com/google/osv-scanner)."
 )
 
+_SCAN_TIMEOUT = 300  # seconds; osv-scanner does a recursive, network-bound scan
+
 
 class OsvCache:
     def __init__(self, data: dict[str, Any]) -> None:
@@ -95,9 +97,13 @@ def _raw_scan(workdir: Path, *, bypass_ignores: bool = False) -> dict[str, Any]:
         os.close(fd)
         cmd += ["--config", empty_cfg]
     try:
-        result = subprocess.run(cmd, capture_output=True, check=False, text=True)
+        result = subprocess.run(
+            cmd, capture_output=True, check=False, text=True, timeout=_SCAN_TIMEOUT
+        )
     except FileNotFoundError as e:
         raise RuntimeError(_NOT_FOUND_MSG) from e
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"osv-scanner timed out after {_SCAN_TIMEOUT}s") from e
     finally:
         if empty_cfg:
             os.unlink(empty_cfg)

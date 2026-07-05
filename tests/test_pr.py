@@ -174,6 +174,16 @@ def test_apply_plan_defaults_pr_labels(tmp_path, monkeypatch):
     assert "dependencies" in create and "automated" in create
 
 
+def test_run_converts_timeout_to_called_process_error(monkeypatch):
+    def _timeout(*a, **k):
+        raise subprocess.TimeoutExpired(cmd=["git", "push"], timeout=1)
+
+    monkeypatch.setattr(subprocess, "run", _timeout)
+    with pytest.raises(subprocess.CalledProcessError) as exc:
+        pr_mod._run(["git", "push"], cwd=".")
+    assert exc.value.returncode == 124
+
+
 def test_apply_plan_restores_head_to_original_ref(tmp_path, monkeypatch):
     """apply_plan must leave HEAD on the original ref, not the PR branch.
 

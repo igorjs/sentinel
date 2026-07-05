@@ -15,6 +15,20 @@ _BOT_NAME = "sentinel-bot"
 _BOT_EMAIL = "sentinel@users.noreply.github.com"
 DEFAULT_PR_LABELS = ["dependencies", "automated"]
 
+_CMD_TIMEOUT = 300  # seconds per git/gh/package-manager call
+
+
+def _run(cmd, **kwargs):
+    """subprocess.run with a default timeout; a timeout surfaces as
+    CalledProcessError (exit 124) so the scopes' existing handlers catch it."""
+    kwargs.setdefault("timeout", _CMD_TIMEOUT)
+    try:
+        return subprocess.run(cmd, **kwargs)
+    except subprocess.TimeoutExpired as e:
+        raise subprocess.CalledProcessError(
+            124, cmd, output=e.stdout, stderr=f"timed out after {_CMD_TIMEOUT}s"
+        ) from e
+
 
 def branch_name(scope: str, key: str) -> str:
     scope_slug = _SAFE.sub("-", scope.lower()).strip("-")
@@ -39,12 +53,12 @@ def _push_branch(branch: str, workdir: Path) -> None:
     # against. A genuine concurrent writer then aborts the push instead of being
     # silently clobbered. No-op (non-zero, ignored) the first time the branch exists
     # only locally.
-    subprocess.run(
+    _run(
         ["git", "fetch", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}"],
         cwd=workdir,
         check=False,
     )
-    subprocess.run(
+    _run(
         ["git", "push", "--force-with-lease", "origin", f"{branch}:{branch}"],
         cwd=workdir,
         check=True,
@@ -53,7 +67,7 @@ def _push_branch(branch: str, workdir: Path) -> None:
 
 def _current_ref(workdir: Path) -> str:
     """Current branch name, or the commit SHA when HEAD is detached."""
-    r = subprocess.run(
+    r = _run(
         ["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
         cwd=workdir,
         capture_output=True,
@@ -62,7 +76,7 @@ def _current_ref(workdir: Path) -> str:
     ref = r.stdout.strip()
     if r.returncode == 0 and ref:
         return ref
-    return subprocess.run(
+    return _run(
         ["git", "rev-parse", "HEAD"], cwd=workdir, capture_output=True, check=True, text=True
     ).stdout.strip()
 
@@ -70,10 +84,13 @@ def _current_ref(workdir: Path) -> str:
 def _restore_ref(ref: str, workdir: Path) -> None:
     """Return HEAD to ``ref``, discarding the PR branch's working-tree state.
 
-    Best-effort (check=False): a restore failure must not mask an error already
-    propagating out of apply_plan.
+    Best-effort: a restore failure (including a timeout) must not mask an error
+    already propagating out of apply_plan.
     """
-    subprocess.run(["git", "checkout", "--force", ref], cwd=workdir, check=False)
+    try:
+        _run(["git", "checkout", "--force", ref], cwd=workdir, check=False)
+    except subprocess.CalledProcessError:
+        pass
 
 
 def apply_plan(
@@ -102,16 +119,16 @@ def apply_plan(
 
 
 def _apply_plan(plan: Plan, *, workdir: Path, pr_labels: list[str] | None) -> Result:
-    subprocess.run(["git", "switch", "-C", plan.branch], cwd=workdir, check=True)
+    _run(["git", "switch", "-C", plan.branch], cwd=workdir, check=True)
 
     for cmd in plan.commands:
-        subprocess.run(cmd, cwd=workdir, check=True)
+        _run(cmd, cwd=workdir, check=True)
     for step in plan.post_steps:
         step()
 
     # No-op detection: both tracked changes AND untracked files must be absent.
-    diff_rc = subprocess.run(["git", "diff", "--quiet", "HEAD"], cwd=workdir).returncode
-    untracked = subprocess.run(
+    diff_rc = _run(["git", "diff", "--quiet", "HEAD"], cwd=workdir).returncode
+    untracked = _run(
         ["git", "status", "--porcelain"],
         cwd=workdir,
         capture_output=True,
@@ -121,8 +138,8 @@ def _apply_plan(plan: Plan, *, workdir: Path, pr_labels: list[str] | None) -> Re
     if diff_rc == 0 and not untracked:
         return Result(scope=plan.scope, key=plan.key, kind="noop", summary="no diff after apply")
 
-    subprocess.run(["git", "add", "-A"], cwd=workdir, check=True)
-    subprocess.run(
+    _run(["git", "add", "-A"], cwd=workdir, check=True)
+    _run(
         [
             "git",
             "-c",
@@ -141,7 +158,7 @@ def _apply_plan(plan: Plan, *, workdir: Path, pr_labels: list[str] | None) -> Re
     _push_branch(plan.branch, workdir)
 
     existing = (
-        subprocess.run(
+        _run(
             ["gh", "pr", "list", "--head", plan.branch, "--state", "open", "--json", "number"],
             cwd=workdir,
             capture_output=True,
@@ -153,7 +170,7 @@ def _apply_plan(plan: Plan, *, workdir: Path, pr_labels: list[str] | None) -> Re
     open_prs = json.loads(existing)
     if open_prs:
         pr_num = str(open_prs[0]["number"])
-        subprocess.run(
+        _run(
             ["gh", "pr", "edit", pr_num, "--body", plan.body],
             cwd=workdir,
             check=True,
@@ -161,7 +178,7 @@ def _apply_plan(plan: Plan, *, workdir: Path, pr_labels: list[str] | None) -> Re
     else:
         labels = pr_labels or DEFAULT_PR_LABELS
         label_args = [arg for label in labels for arg in ("--label", label)]
-        subprocess.run(
+        _run(
             [
                 "gh",
                 "pr",
@@ -218,7 +235,7 @@ def open_issue_fallback(
     # `--search` (a fuzzy, eventually-consistent full-text index) so a just-created
     # issue can't be missed and re-created by a near-simultaneous run.
     existing = (
-        subprocess.run(
+        _run(
             [
                 "gh",
                 "issue",
@@ -245,7 +262,7 @@ def open_issue_fallback(
             scope=scope, key=key, kind="noop", summary=f"existing issue #{matches[0]['number']}"
         )
 
-    subprocess.run(
+    _run(
         [
             "gh",
             "issue",

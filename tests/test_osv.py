@@ -192,3 +192,14 @@ def test_raw_scan_non_json_output_raises_runtime_error(tmp_path, monkeypatch):
     )
     with pytest.raises(RuntimeError, match="osv-scanner"):
         osv_mod._raw_scan(tmp_path)
+
+
+def test_raw_scan_timeout_raises_runtime_error(tmp_path, monkeypatch):
+    from scripts import osv as osv_mod
+
+    def _timeout(*a, **k):
+        raise subprocess.TimeoutExpired(cmd="osv-scanner", timeout=1)
+
+    monkeypatch.setattr(subprocess, "run", _timeout)
+    with pytest.raises(RuntimeError, match="timed out"):
+        osv_mod._raw_scan(tmp_path)
