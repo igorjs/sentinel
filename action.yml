@@ -56,16 +56,19 @@ runs:
     - shell: bash
       env:
         GH_TOKEN: ${{ inputs.github_token }}
+        SCOPE: ${{ inputs.scope }}
+        CONFIG_PATH: ${{ inputs.config_path }}
+        DRY_RUN: ${{ inputs.dry_run }}
       run: |
         set -euo pipefail
         FLAGS=""
-        if [[ "${{ inputs.dry_run }}" == "true" ]]; then FLAGS="--dry-run"; fi
+        if [[ "$DRY_RUN" == "true" ]]; then FLAGS="--dry-run"; fi
         # Invoke as a module from the action root so scripts/ is never sys.path[0]
         # (a file-path invocation shadows the stdlib `types` module).
         cd "${{ github.action_path }}"
         python -m scripts.sentinel \
           --mode run \
-          --scope "${{ inputs.scope }}" \
-          --config "${{ inputs.config_path }}" \
+          --scope "$SCOPE" \
+          --config "$CONFIG_PATH" \
           --workdir "${{ github.workspace }}" \
           $FLAGS
