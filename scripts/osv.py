@@ -108,7 +108,10 @@ def _raw_scan(workdir: Path, *, bypass_ignores: bool = False) -> dict[str, Any]:
         return {"results": []}
     if result.returncode not in (0, 1):
         raise RuntimeError(f"osv-scanner failed (exit {result.returncode}): {result.stderr}")
-    return json.loads(result.stdout or '{"results": []}')
+    try:
+        return json.loads(result.stdout or '{"results": []}')
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"osv-scanner returned non-JSON output: {e}") from e
 
 
 def parse_ignored_ids(osv_scanner_toml: str) -> set[str]:

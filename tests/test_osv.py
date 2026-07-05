@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -181,3 +182,13 @@ def test_scan_with_recovery_noop_without_toml(tmp_path, monkeypatch):
     monkeypatch.setattr(osv_mod, "_raw_scan", fake_raw)
     OsvCache.scan_with_recovery(tmp_path)  # no osv-scanner.toml present
     assert calls == [False]  # only the normal scan; no bypass audit
+
+
+def test_raw_scan_non_json_output_raises_runtime_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout="not json{", stderr=""),
+    )
+    with pytest.raises(RuntimeError, match="osv-scanner"):
+        osv_mod._raw_scan(tmp_path)
