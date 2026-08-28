@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """go scope: bumps module deps + optionally the `go <version>` runtime directive."""
 
 from __future__ import annotations

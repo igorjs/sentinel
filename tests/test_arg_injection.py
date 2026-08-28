@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Each scope must refuse to build a command from an advisory whose package name
 or fixed version is an unsafe argv token (argument injection)."""
 

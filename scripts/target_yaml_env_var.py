@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """yaml-env-var target_kind. Lazy-loads ruamel.yaml inside functions."""
 
 from __future__ import annotations

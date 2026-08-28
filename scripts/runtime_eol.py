@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """endoflife.date client and runtime version-string math.
 
 Pure stdlib. Network access (fetch_cycles) is isolated and fail-closed; all

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from scripts import freshness as F
 from scripts.config import Config, ScopeOverride
 from scripts.freshness import Outdated, Selection, select

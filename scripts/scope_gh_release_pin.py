@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """gh-release-pin scope: bump a structured pin when upstream ships a new release."""
 
 from __future__ import annotations

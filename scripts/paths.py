@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Containment for config-supplied filesystem paths.
 
 `target_file` and `gomod_path` come from the repo's sentinel.toml. `config.py`

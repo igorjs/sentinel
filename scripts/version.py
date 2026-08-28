@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Cross-ecosystem version ordering for selecting the minimum fix.
 
 Sentinel targets crates.io, Go, and npm (all SemVer 2.0) via ``semver_key``

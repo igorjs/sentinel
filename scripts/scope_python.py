@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """python scope: bump PyPI deps when OSV reports a fixable advisory.
 Detects lockfile to pick poetry/uv/pipenv. No lockfile -> issue fallback."""
 

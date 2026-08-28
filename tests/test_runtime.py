@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from datetime import date
 from datetime import date as _date
 from pathlib import Path

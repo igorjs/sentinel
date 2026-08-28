@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Self-cleaning of osv-scanner.toml suppressions when a bump closes an advisory.
 
 osv-scanner.toml ignore entries apply across ecosystems, so this is shared by

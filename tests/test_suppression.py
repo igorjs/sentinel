@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from pathlib import Path
 
 from scripts.suppression import osv_scanner_cleanup_step

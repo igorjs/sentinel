@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from scripts.version import loose_tag_key, pypi_key, semver_key
 
 # --- SemVer (crates / go / npm) ---

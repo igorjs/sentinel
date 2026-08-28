@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """One OSV advisory can affect multiple packages. Each affected package must get
 its own drift and its own branch, or bumps silently clobber each other on a
 shared branch."""

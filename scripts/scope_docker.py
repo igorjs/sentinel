@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """docker scope: bump end-of-life official Python/Node base images in Dockerfiles."""
 
 from __future__ import annotations

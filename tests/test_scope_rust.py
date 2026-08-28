@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # tests/test_scope_rust.py
 from pathlib import Path
 

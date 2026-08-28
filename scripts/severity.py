@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Derive one comparable severity per OSV advisory and gate by a threshold.
 
 Pure functions, no I/O. osv-scanner v2.x supplies a precomputed numeric CVSS

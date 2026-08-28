@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # tests/test_scope_gh_release_pin.py
 import subprocess
 from pathlib import Path

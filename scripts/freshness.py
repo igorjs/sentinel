@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Version-freshness engine: select outdated deps and open grouped PRs.
 
 The per-ecosystem adapter (injected) does the package-manager work; this module

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """TOML config loader for .github/sentinel.toml."""
 
 from __future__ import annotations

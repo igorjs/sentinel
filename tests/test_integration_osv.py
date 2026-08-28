@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """End-to-end check against the real osv-scanner binary.
 
 Every other test feeds synthetic OsvCache fixtures, so a change in osv-scanner's

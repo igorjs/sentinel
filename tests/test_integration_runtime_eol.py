@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 # tests/test_integration_runtime_eol.py
 """Hits the real endoflife.date API. Skipped without network/opt-in env."""
 

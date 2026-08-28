@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Runtime declaration registry: read/write the version declarations sentinel
 bumps when a runtime reaches end of life."""
 

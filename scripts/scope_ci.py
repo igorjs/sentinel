@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """ci scope: bump end-of-life python/node version-matrix entries in GitHub workflows."""
 
 from __future__ import annotations

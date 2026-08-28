@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Wrapper around `osv-scanner` with an in-process cache.
 
 Parses `--format json` output (`results[].packages[].vulnerabilities[]`).

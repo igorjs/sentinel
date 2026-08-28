@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Shared dataclasses used across all scopes."""
 
 from collections.abc import Callable

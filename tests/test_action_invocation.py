@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Guards the way the composite actions launch the CLI.
 
 The action.yml files used to run the CLI by file path

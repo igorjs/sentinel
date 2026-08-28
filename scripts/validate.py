@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Validation of advisory-sourced identifiers before they reach subprocess argv.
 
 OSV advisory data is third-party, untrusted input. Package names and fixed

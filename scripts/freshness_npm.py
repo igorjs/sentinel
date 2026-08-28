@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """npm adapter for the freshness engine: list outdated deps, apply bumps."""
 
 from __future__ import annotations

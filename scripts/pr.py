@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Branch naming, git ops, idempotent PR/issue helpers for sentinel scopes."""
 
 from __future__ import annotations

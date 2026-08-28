@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """javascript scope: bump npm deps when OSV reports a fixable advisory.
 Detects lockfile to pick npm/pnpm/yarn. No lockfile -> issue fallback."""
 

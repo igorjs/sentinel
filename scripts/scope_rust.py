@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """rust scope: bump cargo deps when OSV reports a fixable advisory.
 Self-cleans osv-scanner.toml and deny.toml ignore entries."""
 
