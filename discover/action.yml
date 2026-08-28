@@ -18,6 +18,12 @@ runs:
       with:
         python-version: "3.12"
 
+    # github.action_path points at discover/, so the shared requirements file
+    # sits one level up. Without this step the CLI dies on `import semver`
+    # before it can read a single config file.
+    - shell: bash
+      run: pip install --quiet -r "${{ github.action_path }}/../requirements.txt"
+
     - id: run
       shell: bash
       env:

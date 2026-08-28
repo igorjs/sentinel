@@ -9,6 +9,7 @@ via `-m`, never by file path. These tests pin the working invocation so the bug
 cannot return.
 """
 
+import ast
 import json
 import os
 import subprocess
@@ -19,6 +20,32 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _ACTION = _PROJECT_ROOT / "action.yml"
 _DISCOVER_ACTION = _PROJECT_ROOT / "discover" / "action.yml"
 _SCRIPTS = _PROJECT_ROOT / "scripts"
+_REQUIREMENTS = _PROJECT_ROOT / "requirements.txt"
+
+# Package names we ship under differ from the module you import: pip installs
+# `ruamel.yaml`, code writes `import ruamel`. Compare on the import root.
+_LOCAL_PACKAGES = {"scripts", "tests"}
+
+
+def _pinned_import_roots() -> set[str]:
+    roots = set()
+    for line in _REQUIREMENTS.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith(("#", "-")):
+            continue
+        name = line.split("==")[0].split("[")[0].strip()
+        roots.add(name.split(".")[0])
+    return roots
+
+
+def _imported_roots(path: Path) -> set[str]:
+    roots = set()
+    for node in ast.walk(ast.parse(path.read_text())):
+        if isinstance(node, ast.Import):
+            roots.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
+    return roots
 
 
 def test_no_script_shadows_a_stdlib_module():
@@ -52,6 +79,44 @@ def test_discover_action_invokes_cli_as_module():
     )
     assert "sentinel.py" not in text, (
         "discover/action.yml still invokes the CLI by file path (sentinel.py)."
+    )
+
+
+def test_both_actions_install_the_shared_requirements_file():
+    # discover/action.yml shipped with no install step at all and crashed on
+    # `import semver` for five weeks of scheduled runs. Both manifests must
+    # install the same file so the two entry points cannot drift again.
+    assert 'pip install --quiet -r "${{ github.action_path }}/requirements.txt"' in (
+        _ACTION.read_text()
+    ), "action.yml must install requirements.txt, not an inline pip list."
+    assert 'pip install --quiet -r "${{ github.action_path }}/../requirements.txt"' in (
+        _DISCOVER_ACTION.read_text()
+    ), (
+        "discover/action.yml must install requirements.txt (it lives one level "
+        "below the action root)."
+    )
+
+
+def test_requirements_pins_every_third_party_import():
+    # The five-week outage was a missing dependency, not a missing install step
+    # in isolation: nothing tied the pinned set to what the code actually
+    # imports. Walk every import in scripts/ (including the lazy ones inside
+    # functions, which is how ruamel and tomlkit are loaded) and require a pin.
+    unpinned = {}
+    pinned = _pinned_import_roots()
+    for path in sorted(_SCRIPTS.glob("*.py")):
+        missing = {
+            root
+            for root in _imported_roots(path)
+            if root not in sys.stdlib_module_names
+            and root not in _LOCAL_PACKAGES
+            and root not in pinned
+        }
+        if missing:
+            unpinned[path.name] = sorted(missing)
+    assert unpinned == {}, (
+        f"third-party imports with no pin in requirements.txt: {unpinned}; "
+        "add them or the composite actions will crash at runtime."
     )
 
 
