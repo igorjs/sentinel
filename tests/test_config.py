@@ -267,3 +267,27 @@ def test_malformed_toml_raises_config_error(tmp_path: Path):
     p.write_text("this is = not valid = toml\n")
     with pytest.raises(ConfigError):
         load_config(p)
+
+
+_EXAMPLE_CONFIG = Path(__file__).resolve().parent.parent / "examples" / "sentinel.toml"
+
+
+def test_example_config_is_valid():
+    # The shipped reference config is the first thing a new user copies. If the
+    # validator rejects it, they hit a ConfigError on their first run.
+    cfg = load_config(_EXAMPLE_CONFIG)
+    assert cfg.custom and cfg.scopes
+
+
+def test_example_config_documents_every_supported_key():
+    # Keeps the reference honest: add a key to the allowlists and this fails
+    # until the example demonstrates it.
+    import tomllib
+
+    from scripts.config import _ALLOWED_DEFAULTS, _ALLOWED_SCOPE_OVERRIDE, _ALLOWED_TOP
+
+    raw = tomllib.loads(_EXAMPLE_CONFIG.read_text())
+    shown_scope_keys = set().union(*(spec.keys() for spec in raw["scopes"].values()))
+    assert _ALLOWED_TOP - raw.keys() == set()
+    assert _ALLOWED_SCOPE_OVERRIDE - shown_scope_keys == set()
+    assert _ALLOWED_DEFAULTS - raw["defaults"].keys() == set()

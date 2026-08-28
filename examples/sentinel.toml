@@ -1,0 +1,105 @@
+# Full reference for .github/sentinel.toml.
+#
+# Every key is optional. With no config file at all, Sentinel runs security
+# bumps on every scope it detects, with no severity floor. Copy the parts you
+# want; unknown keys are rejected at load time rather than silently ignored.
+
+# ---------------------------------------------------------------------------
+# [defaults] - repo-wide values. Any scope can override them.
+# ---------------------------------------------------------------------------
+[defaults]
+# Labels put on every PR Sentinel opens.
+pr_labels = ["dependencies", "automated"]
+
+# Act only on advisories at or above this severity.
+# One of: none, low, medium, high, critical. Unset means act on everything.
+# Advisories with no severity data are always bumped and the PR says so.
+min_severity = "high"
+
+# Open runtime end-of-life PRs this many days before the EOL date.
+runtime_eol_lead_days = 30
+
+# Defaults for freshness PRs, see [scopes.javascript] below.
+freshness_level = "range"
+freshness_group = "scope"
+
+# ---------------------------------------------------------------------------
+# [scopes.<name>] - per-scope overrides.
+# Built-in names: rust, go, javascript, python, docker, ci.
+# ---------------------------------------------------------------------------
+
+[scopes.rust]
+# Turn a scope off entirely. Discover stops emitting it, so it never runs.
+enabled = true
+
+[scopes.go]
+# Where go.mod lives, when it is not at the repo root. Relative to the
+# workspace; absolute paths and .. are rejected.
+gomod_path = "services/api"
+
+# Raise an end-of-life `go` directive to the oldest supported release.
+#
+# Careful: go is the one scope that bumps its runtime with no config at all,
+# but that only holds while there is NO [scopes.go] table. The moment you add
+# this table for any reason, update_runtime falls back to its normal default of
+# false. If you add [scopes.go] and still want EOL bumps, set it explicitly.
+update_runtime = true
+
+[scopes.python]
+update_runtime = true
+# Per-scope severity floor, overriding [defaults].
+min_severity = "critical"
+# Per-scope lead time, overriding [defaults].
+runtime_eol_lead_days = 60
+
+[scopes.javascript]
+# Bump outdated npm deps that have no advisory, separately from security bumps.
+update_freshness = true
+
+# range (default) stays inside the declared constraint.
+# major crosses it, up to the absolute latest.
+freshness_level = "range"
+
+# scope (default) opens one PR for the whole scope.
+# dependency opens one PR per dependency.
+freshness_group = "scope"
+
+# Dependency-name globs. Exclude wins over include. Handy for leaving a set
+# to Dependabot so the two tools don't open competing PRs.
+freshness_include = ["@acme/*"]
+freshness_exclude = ["@acme/legacy-*"]
+
+# docker and ci only run when update_runtime is on: they exist purely to raise
+# EOL runtimes, so without it there is nothing for them to do and discover
+# leaves them out.
+[scopes.docker]
+update_runtime = true
+
+[scopes.ci]
+update_runtime = true
+
+# ---------------------------------------------------------------------------
+# [[custom]] - extra scopes beyond the built-ins.
+# ---------------------------------------------------------------------------
+
+# gh-release-pin watches a GitHub repo's latest release and re-pins a version
+# string in one of your files when upstream cuts a newer one. Freshness-driven,
+# so min_severity does not apply.
+#
+# Required: name, kind, upstream_repo, target_file, target_kind, env_var.
+[[custom]]
+name = "libkrun-bottle"
+kind = "gh-release-pin"
+
+# owner/repo to watch. Reading a PRIVATE repo needs a github_token with
+# contents:read there; the default GITHUB_TOKEN only reaches your own repo.
+upstream_repo = "igorjs/libkrun-builds"
+
+# File holding the pin. Relative to the workspace; absolute and .. are rejected.
+target_file = ".github/workflows/release.yml"
+
+target_kind = "yaml-env-var"
+env_var = "LIBKRUN_BOTTLE_VERSION"
+
+# Where the env var lives in the YAML. Defaults to the top-level "env" block.
+# env_path = "jobs.publish.env"

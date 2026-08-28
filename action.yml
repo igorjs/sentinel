@@ -10,18 +10,25 @@ branding:
 
 inputs:
   scope:
-    description: "Scope name (rust / go / javascript / python / <custom name>)"
+    description: >
+      One scope per invocation: a built-in (rust, go, javascript, python,
+      docker, ci) or the name of a [[custom]] scope from sentinel.toml.
+      Usually fed from the discover action's scopes output.
     required: true
   config_path:
-    description: "Path to sentinel.toml relative to workspace"
+    description: "Path to sentinel.toml, relative to the workspace. Missing file means all defaults."
     required: false
     default: ".github/sentinel.toml"
   dry_run:
-    description: "Detect + print plan but don't open PRs"
+    description: "Detect and print the plan, but open no PRs or issues"
     required: false
     default: "false"
   github_token:
-    description: "Token used to call gh API, push branches, and open PRs"
+    description: >
+      Token used to push branches and open PRs and issues. Needs
+      contents:write, pull-requests:write and issues:write on this repo.
+      A gh-release-pin scope reading a private upstream repo needs a token
+      with contents:read there too, which the default token does not have.
     required: false
     default: ${{ github.token }}
 

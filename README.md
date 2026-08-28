@@ -47,7 +47,7 @@ jobs:
     outputs:
       scopes: ${{ steps.s.outputs.scopes }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: igorjs/sentinel/discover@v1
         id: s
 
@@ -60,7 +60,7 @@ jobs:
       matrix:
         scope: ${{ fromJson(needs.discover.outputs.scopes) }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: igorjs/sentinel@v1
         with:
           scope: ${{ matrix.scope }}
@@ -69,6 +69,32 @@ jobs:
 
 No config file needed for a default repo layout. The `discover` job auto-detects which scopes apply and fans the `run` job out over them.
 
+Sentinel asks for three permissions, and uses all three:
+
+- `contents: write` to push the bump branch.
+- `pull-requests: write` to open the PR.
+- `issues: write` for the cases where a safe bump isn't possible, so you still hear about it: no lockfile, a digest-pinned Docker base, a package manager missing from the runner, or an upstream release tag that fails validation.
+
+## Inputs and outputs
+
+`igorjs/sentinel` (the main action):
+
+| Input | Default | Description |
+|---|---|---|
+| `scope` | required | One scope per run. A built-in (`rust`, `go`, `javascript`, `python`, `docker`, `ci`) or a `[[custom]]` name. Normally comes from the `discover` matrix. |
+| `config_path` | `.github/sentinel.toml` | Config location, relative to the workspace. A missing file means all defaults. |
+| `dry_run` | `"false"` | Detect and print the plan, open nothing. |
+| `github_token` | `${{ github.token }}` | Pushes branches, opens PRs and issues. See the note below for private upstream repos. |
+
+`igorjs/sentinel/discover`:
+
+| | Name | Default | Description |
+|---|---|---|---|
+| Input | `config_path` | `.github/sentinel.toml` | Same as above. |
+| Output | `scopes` | | JSON array of scopes to run, like `["python","docker"]`. Empty when nothing applies, so gate the `run` job on it. |
+
+The default `GITHUB_TOKEN` only reaches the repo it was issued for. A `gh-release-pin` scope pointed at a **private** `upstream_repo` needs a token with `contents: read` on that repo, passed through `github_token`.
+
 ## Scopes
 
 Sentinel picks the scopes that apply from the files in your repo.
@@ -76,7 +102,7 @@ Sentinel picks the scopes that apply from the files in your repo.
 | Scope | Detected by | What it bumps | Runtime EOL |
 |---|---|---|---|
 | `rust` | `Cargo.lock` | Cargo deps via `cargo update --precise`, self-cleans `osv-scanner.toml` / `deny.toml` | N/A |
-| `go` | `go.mod` | Module deps via `go get` + `go mod tidy`, optionally the `go <version>` directive | On by default |
+| `go` | `go.mod` | Module deps via `go get` + `go mod tidy`, optionally the `go <version>` directive | On, with a catch [^go] |
 | `javascript` | `package.json` | npm deps via npm / pnpm / yarn (lockfile-detected) | Opt-in |
 | `python` | `pyproject.toml`, `requirements.txt`, or a lockfile | PyPI deps via poetry / uv / pipenv (lockfile-detected) | Opt-in |
 | `docker` | `Dockerfile` (recursive) | EOL `python` / `node` base-image tags | Opt-in |
@@ -84,9 +110,37 @@ Sentinel picks the scopes that apply from the files in your repo.
 
 A repo without a lockfile gets a "no lockfile" issue instead of a risky bump.
 
+[^go]: `go` is the only scope whose runtime bump is on without any config, and only while your file has no `[scopes.go]` table. Adding that table for any reason (to set `gomod_path`, say) drops `update_runtime` back to its normal default of `false` and silently stops the EOL bumps. Set `update_runtime = true` explicitly whenever you add the table.
+
 ## Configuration
 
-Everything below is optional and lives in `.github/sentinel.toml`.
+Everything below is optional and lives in `.github/sentinel.toml`. [`examples/sentinel.toml`](examples/sentinel.toml) is a working file with every supported key in it.
+
+<details>
+<summary><b>Turning scopes on and off, and non-root manifests</b></summary>
+
+```toml
+[scopes.docker]
+enabled = false        # never run this scope; discover stops emitting it
+
+[scopes.go]
+gomod_path = "services/api"   # where go.mod lives, when not at the repo root
+update_runtime = true         # see the note under Scopes before you add this table
+```
+
+`gomod_path` and a custom scope's `target_file` are both workspace-relative. Absolute paths and `..` are rejected when the config loads.
+</details>
+
+<details>
+<summary><b>PR labels</b></summary>
+
+Every PR Sentinel opens carries `dependencies` and `automated`. To change them:
+
+```toml
+[defaults]
+pr_labels = ["dependencies", "security", "automated"]
+```
+</details>
 
 <details>
 <summary><b>Severity gating</b></summary>
@@ -120,7 +174,7 @@ When a floor bump touches `requires-python` or `engines.node`, Sentinel refreshe
 <details>
 <summary><b>Version freshness (opt-in)</b></summary>
 
-Set `update_freshness = true` on the `javascript` scope to bump outdated npm deps to the newest version within their declared range. It runs separately from security bumps, on the `sentinel/javascript/freshness` branch.
+Set `update_freshness = true` on the `javascript` scope to bump outdated npm deps to the newest version within their declared range. It runs separately from security bumps, on its own `sentinel/javascript/freshness-<digest>` branch. Every Sentinel branch ends in a short hash of what it's bumping, so two bumps whose names collapse to the same slug (the npm package `@a/b` and `a-b`, for one) never fight over a branch.
 
 - `freshness_level`: `range` (default) stays within the constraint; `major` crosses it to the absolute latest.
 - `freshness_group`: `scope` (default) is one PR; `dependency` is one PR per dep.
@@ -145,7 +199,9 @@ env_var = "LIBKRUN_BOTTLE_VERSION"
 # env_path = "jobs.publish.env"   # optional; default "env" (top-level)
 ```
 
-Sentinel opens a PR when upstream cuts a newer release.
+Sentinel opens a PR when upstream cuts a newer release. `target_file` is workspace-relative, and `env_path` defaults to the top-level `env` block.
+
+If `upstream_repo` is private, pass a `github_token` with `contents: read` on it. The default `GITHUB_TOKEN` is scoped to your own repo and the release lookup fails against anything else.
 </details>
 
 <details>

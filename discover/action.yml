@@ -3,12 +3,15 @@ description: >
   Auto-detect enabled Sentinel scopes for a repo. Outputs a JSON array.
 inputs:
   config_path:
-    description: "Path to sentinel.toml relative to workspace"
+    description: "Path to sentinel.toml, relative to the workspace. Missing file means all defaults."
     required: false
     default: ".github/sentinel.toml"
 outputs:
   scopes:
-    description: "JSON array of enabled scope names"
+    description: >
+      JSON array of scope names to run, e.g. ["python","docker"]. Empty
+      array when nothing applies, so gate the run job on it. Feed each
+      element to the main action's scope input via a matrix.
     value: ${{ steps.run.outputs.scopes }}
 
 runs:
