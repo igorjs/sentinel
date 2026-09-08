@@ -1,0 +1,10 @@
+# Runtime dependencies for both composite actions (action.yml and
+# discover/action.yml). Kept in one file on purpose: the two manifests used to
+# carry their own inline `pip install "x==y"` lists, discover/action.yml had no
+# install step at all, and it crashed on `import semver` on every run for five
+# weeks. A shared file also makes these pins visible to osv-scanner and
+# Dependabot, which cannot read an inline pip command.
+packaging==24.2
+ruamel.yaml==0.19.1
+semver==3.0.2
+tomlkit==0.15.0
