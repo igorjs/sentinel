@@ -44,8 +44,13 @@ jobs:
           # itself happens before harden-runner activates, but cached
           # pulls and downstream calls still go through the policy.
           egress-policy: block
+          # api.deps.dev is where osv-scanner resolves transitive dependencies
+          # for manifests that don't pin them (requirements.txt, pom.xml, ...).
+          # Without it the scanner reports 0 vulnerabilities and still exits
+          # 127 on "failed resolution", so the gate fails while looking clean.
           allowed-endpoints: >
             agent.api.stepsecurity.io:443
+            api.deps.dev:443
             api.github.com:443
             api.osv.dev:443
             codeload.github.com:443
