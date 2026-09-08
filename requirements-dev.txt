@@ -1,3 +1,9 @@
 -r requirements.txt
 pytest==9.1.1
 ruff==0.15.18
+
+# Transitive, via pytest. pytest only asks for `pygments>=2.7.2`, and that range
+# still admits 2.9.0, which carries GHSA-mrwq-x4v8-fh7p and GHSA-5239-wwwm-4pmq.
+# pip resolves to the latest anyway, but osv-scanner resolves the range and
+# rightly flags the floor, so pin it here and keep the scan honest.
+pygments==2.21.0
